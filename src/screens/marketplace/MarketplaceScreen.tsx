@@ -11,6 +11,7 @@ import { ListingWithImages } from '../../types/listing.types';
 import { useInfiniteScroll } from '../../hooks/useInfiniteScroll';
 import { useDataFetch } from '../../hooks/useDataFetch';
 import { RequestPriority } from '../../services/dataManager';
+import { useAuth } from '../../context/AuthContext';
 
 interface MarketplaceScreenProps {
   initialSearchQuery?: string;
@@ -31,13 +32,13 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
   const [filters, setFilters] = useState<SearchFilters>({});
   const [showFilters, setShowFilters] = useState(false);
   const [isSearchMode, setIsSearchMode] = useState(false);
+  const { user } = useAuth();
 
   // Fetch user profile for location
   const { data: profile } = useDataFetch({
     cacheKey: 'profile:current',
     fetchFn: () => profilesService.getCurrentUserProfile(),
     priority: RequestPriority.HIGH,
-    ttl: 10 * 60 * 1000,
   });
 
   const userLocation = useMemo(() => {
@@ -53,8 +54,9 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
   const cacheKey = useMemo(() => {
     const filterStr = JSON.stringify(filters);
     const searchStr = searchQuery.trim();
-    return `marketplace:listings:${searchStr}:${filterStr}`;
-  }, [searchQuery, filters]);
+    const ownerFilter = user?.id || 'anon';
+    return `marketplace:listings:${searchStr}:${filterStr}:${ownerFilter}`;
+  }, [searchQuery, filters, user?.id]);
 
   // Infinite scroll for listings
   const {
@@ -76,18 +78,23 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
           limit,
           offset,
         };
-        return await searchService.searchListingsDirect(searchFilters);
+        const results = await searchService.searchListingsDirect(searchFilters);
+        return user?.id ? results.filter((listing) => listing.user_id !== user.id) : results;
       } else {
         // No search/filters - show location-based listings first
         setIsSearchMode(false);
         const allListings = await listingsService.getAllListings(1000); // Get more for sorting
+
+        const filteredListings = user?.id
+          ? allListings.filter((listing) => listing.user_id !== user.id)
+          : allListings;
 
         if (userLocation && (userLocation.city || userLocation.state)) {
           // Split into location-based and others
           const locationListings: ListingWithImages[] = [];
           const otherListings: ListingWithImages[] = [];
 
-          allListings.forEach((listing) => {
+          filteredListings.forEach((listing) => {
             const matchesLocation =
               (userLocation.city &&
                 listing.city?.toLowerCase().includes(userLocation.city.toLowerCase())) ||
@@ -106,13 +113,12 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
           return combined.slice(offset, offset + limit);
         } else {
           // No location - just show all listings
-          return allListings.slice(offset, offset + limit);
+          return filteredListings.slice(offset, offset + limit);
         }
       }
     },
     limit: ITEMS_PER_PAGE,
     priority: RequestPriority.HIGH,
-    ttl: 5 * 60 * 1000, // 5 minutes
   });
 
   // Update search query when initialSearchQuery changes (from home screen)

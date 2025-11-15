@@ -2,7 +2,6 @@ import React, { useState, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
-import { authService } from '../../services/auth';
 import { BottomNavigation, TabType } from '../../components/common/BottomNavigation';
 import { DashboardHeader } from '../../components/common/DashboardHeader';
 import { ListingsSection } from '../../components/home/ListingsSection';
@@ -16,23 +15,14 @@ interface DashboardScreenProps {
 }
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
-  const { setIsAuthenticated } = useAuth();
+  const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [marketplaceSearchQuery, setMarketplaceSearchQuery] = useState<string>('');
   const [refreshing, setRefreshing] = useState(false);
   const refreshFunctionsRef = useRef<Array<() => Promise<void>>>([]);
 
   const handleLogout = async () => {
-    try {
-      const { error } = await authService.signOut();
-      if (error) {
-        console.error('Logout error:', error);
-      } else {
-        setIsAuthenticated(false);
-      }
-    } catch (err) {
-      console.error('Logout error:', err);
-    }
+    await logout();
   };
 
   const handleTabChange = (tab: TabType) => {

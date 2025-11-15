@@ -29,17 +29,17 @@ class InitializationService {
       dataManager.fetch(
         'home:forum:recent:3',
         () => forumService.getAllPosts(3),
-        { priority: RequestPriority.HIGH, ttl: 2 * 60 * 1000 } // 2 minutes
+        { priority: RequestPriority.HIGH }
       ),
       dataManager.fetch(
         'home:listings:nearby:5',
         () => listingsService.getNearbyListings(5),
-        { priority: RequestPriority.HIGH, ttl: 2 * 60 * 1000 }
+        { priority: RequestPriority.HIGH }
       ),
       dataManager.fetch(
         'home:events:upcoming:5',
         () => eventsService.getUpcomingEvents(5),
-        { priority: RequestPriority.HIGH, ttl: 2 * 60 * 1000 }
+        { priority: RequestPriority.HIGH }
       ),
       // User profile stats (small, important)
       dataManager.fetch(
@@ -64,13 +64,13 @@ class InitializationService {
             };
           }
         },
-        { priority: RequestPriority.HIGH, ttl: 5 * 60 * 1000 }
+        { priority: RequestPriority.HIGH }
       ),
       // User profile data
       dataManager.fetch(
         'profile:current',
         () => profilesService.getCurrentUserProfile(),
-        { priority: RequestPriority.HIGH, ttl: 10 * 60 * 1000 } // 10 minutes
+        { priority: RequestPriority.HIGH }
       ),
     ];
 
@@ -90,43 +90,37 @@ class InitializationService {
     // Marketplace listings (10 items)
     this.backgroundSync.addTask(
       'marketplace:listings:10',
-      () => listingsService.getAllListings(10),
-      5 * 60 * 1000 // 5 minutes
+      () => listingsService.getAllListings(10)
     );
 
     // More forum posts for community tab
     this.backgroundSync.addTask(
       'community:forum:recent:20',
-      () => forumService.getAllPosts(20),
-      5 * 60 * 1000
+      () => forumService.getAllPosts(20)
     );
 
     // More events for events tab
     this.backgroundSync.addTask(
       'events:upcoming:20',
-      () => eventsService.getUpcomingEvents(20),
-      5 * 60 * 1000
+      () => eventsService.getUpcomingEvents(20)
     );
 
     // User's own listings
     this.backgroundSync.addTask(
       `listings:user:${this.userId}`,
-      () => listingsService.getListingsByUserId(this.userId!),
-      5 * 60 * 1000
+      () => listingsService.getListingsByUserId(this.userId!)
     );
 
     // User's own events
     this.backgroundSync.addTask(
       `events:user:${this.userId}`,
-      () => eventsService.getUserEvents(this.userId!),
-      5 * 60 * 1000
+      () => eventsService.getUserEvents(this.userId!)
     );
 
     // User's forum posts
     this.backgroundSync.addTask(
       `forum:user:${this.userId}`,
-      () => forumService.getUserPosts(this.userId!),
-      5 * 60 * 1000
+      () => forumService.getUserPosts(this.userId!)
     );
 
     // Start background sync

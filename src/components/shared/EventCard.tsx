@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { EventWithCreator } from '../../types/event.types';
-import { eventFavoritesService } from '../../services/eventFavorites';
+import { useFavorites } from '../../context/FavoritesContext';
+import { RateLimiter } from '../../utils/throttle';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - 48; // Screen width minus padding
@@ -19,35 +20,28 @@ export const EventCard: React.FC<EventCardProps> = ({
   onPress,
   onFavorite,
 }) => {
-  const [isFavorite, setIsFavorite] = useState(false);
+  const { isEventFavorited, toggleEventFavorite } = useFavorites();
+  
+  // Rate limiter: max 5 favorite actions per 10 seconds
+  const favoriteRateLimiter = useRef(new RateLimiter(5, 10000));
 
-  // Check favorite status on mount
-  useEffect(() => {
-    const checkFavoriteStatus = async () => {
-      try {
-        const favorited = await eventFavoritesService.hasUserFavorited(event.id);
-        setIsFavorite(favorited);
-      } catch (error) {
-        console.error('Error checking favorite status:', error);
-      }
-    };
-
-    checkFavoriteStatus();
-  }, [event.id]);
+  // Get favorite status from context
+  const isFavorite = isEventFavorited(event.id);
 
   const handleFavoritePress = async () => {
-    // Optimistic update - update UI immediately
-    const previousFavoriteState = isFavorite;
-    setIsFavorite(!previousFavoriteState);
-    onFavorite?.();
+    // Rate limiting check
+    if (!favoriteRateLimiter.current.canCall()) {
+      console.warn('Favorite action rate limited');
+      return;
+    }
 
-    // Then sync with backend
+    favoriteRateLimiter.current.recordCall();
+
     try {
-      await eventFavoritesService.toggleFavorite(event.id);
+      await toggleEventFavorite(event.id);
+      // Context handles optimistic updates and real-time sync
     } catch (error) {
       console.error('Error toggling favorite:', error);
-      // Revert on error
-      setIsFavorite(previousFavoriteState);
     }
   };
 

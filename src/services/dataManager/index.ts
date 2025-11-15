@@ -3,8 +3,8 @@ import { RequestPriority } from './types';
 
 // Create singleton instance
 const dataManager = new DataManager({
-  cacheTTL: 5 * 60 * 1000, // 5 minutes
-  maxCacheSize: 100,
+  cacheTTL: 10 * 60 * 1000, // 10 minutes (was MAX_SAFE_INTEGER - never expired)
+  maxCacheSize: 200, // Increased from 100 for better browsing experience
   backgroundFetchDelay: 1000, // 1 second
   requestTimeout: 30000, // 30 seconds
 });

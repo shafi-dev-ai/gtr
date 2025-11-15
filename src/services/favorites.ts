@@ -35,7 +35,7 @@ class FavoritesService {
 
         return {
           ...listing,
-          images: images || [],
+          listing_images: images || [],
         } as FavoriteListing;
       })
     );

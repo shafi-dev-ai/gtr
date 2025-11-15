@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, Dimensions, TouchableOpacity } from 'react-native';
 import { ListingCard } from '../shared/ListingCard';
 import { SearchBar } from '../common/SearchBar';
@@ -7,6 +7,8 @@ import { ListingWithImages } from '../../types/listing.types';
 import { profilesService } from '../../services/profiles';
 import { useDataFetch } from '../../hooks/useDataFetch';
 import { RequestPriority } from '../../services/dataManager';
+import { useAuth } from '../../context/AuthContext';
+import { realtimeService } from '../../services/realtime';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - 48; // Screen width minus padding
@@ -31,6 +33,7 @@ export const ListingsSection: React.FC<ListingsSectionProps> = ({
   onRefreshReady,
 }) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const { user } = useAuth();
 
   // Fetch listings using DataManager
   const { data: allListings, loading, refresh } = useDataFetch<ListingWithImages[]>({
@@ -40,8 +43,6 @@ export const ListingsSection: React.FC<ListingsSectionProps> = ({
       return listings;
     },
     priority: RequestPriority.HIGH,
-    ttl: 2 * 60 * 1000, // 2 minutes
-    staleWhileRevalidate: true,
   });
 
   // Fetch user profile for location filtering
@@ -49,14 +50,19 @@ export const ListingsSection: React.FC<ListingsSectionProps> = ({
     cacheKey: 'profile:current',
     fetchFn: () => profilesService.getCurrentUserProfile(),
     priority: RequestPriority.HIGH,
-    ttl: 10 * 60 * 1000, // 10 minutes
   });
+
+  const visibleListings = useMemo(() => {
+    if (!allListings) return [];
+    if (!user?.id) return allListings;
+    return allListings.filter((listing) => listing.user_id !== user.id);
+  }, [allListings, user?.id]);
 
   // Sort and filter listings based on location
   const sortedListings = useMemo(() => {
-    if (!allListings) return [];
+    if (!visibleListings) return [];
     
-    let sorted = allListings;
+    let sorted = visibleListings;
     if (profile?.location) {
       const locationParts = profile.location.split(',').map(s => s.trim());
       const userCity = locationParts[0]?.toLowerCase();
@@ -66,7 +72,7 @@ export const ListingsSection: React.FC<ListingsSectionProps> = ({
         const locationListings: ListingWithImages[] = [];
         const otherListings: ListingWithImages[] = [];
 
-        allListings.forEach((listing) => {
+        visibleListings.forEach((listing) => {
           const listingCity = listing.city?.toLowerCase();
           const listingState = listing.state?.toLowerCase();
           const matchesLocation =
@@ -85,7 +91,7 @@ export const ListingsSection: React.FC<ListingsSectionProps> = ({
     }
 
     return sorted.slice(0, 5);
-  }, [allListings, profile]);
+  }, [visibleListings, profile]);
 
   const handleSearchSubmit = () => {
     if (searchQuery.trim()) {
@@ -96,8 +102,20 @@ export const ListingsSection: React.FC<ListingsSectionProps> = ({
     }
   };
 
+  // Subscribe to new listings in real-time
+  useEffect(() => {
+    const unsubscribe = realtimeService.subscribeToNewListings(() => {
+      // Refresh listings when new ones are added
+      refresh();
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [refresh]);
+
   // Expose refresh function to parent
-  React.useEffect(() => {
+  useEffect(() => {
     if (onRefreshReady) {
       onRefreshReady(refresh);
     }

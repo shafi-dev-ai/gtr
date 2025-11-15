@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ListingWithImages } from '../../types/listing.types';
-import { favoritesService } from '../../services/favorites';
+import { useFavorites } from '../../context/FavoritesContext';
+import { RateLimiter } from '../../utils/throttle';
 
 interface ListingCardProps {
   listing: ListingWithImages;
@@ -21,22 +22,15 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   onChatPress,
   onFavorite,
 }) => {
-  const [isFavorite, setIsFavorite] = useState(false);
+  const { isListingFavorited, toggleListingFavorite } = useFavorites();
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  
+  // Rate limiter: max 5 favorite actions per 10 seconds
+  const favoriteRateLimiter = useRef(new RateLimiter(5, 10000));
 
-  // Check favorite status on mount
-  useEffect(() => {
-    const checkFavoriteStatus = async () => {
-      try {
-        const favorited = await favoritesService.hasUserFavorited(listing.id);
-        setIsFavorite(favorited);
-      } catch (error) {
-        console.error('Error checking favorite status:', error);
-      }
-    };
-
-    checkFavoriteStatus();
-  }, [listing.id]);
+  // Get favorite status from context
+  const isFavorite = isListingFavorited(listing.id);
 
   const primaryImage = listing.listing_images?.find(img => img.is_primary)?.image_url 
     || listing.listing_images?.[0]?.image_url 
@@ -46,18 +40,24 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   const location = listing.location || `${listing.city || ''}, ${listing.state || ''}`.trim() || 'Location not specified';
 
   const handleFavoritePress = async () => {
-    // Optimistic update - update UI immediately
-    const previousFavoriteState = isFavorite;
-    setIsFavorite(!previousFavoriteState);
-    onFavorite?.();
+    if (favoriteLoading) return;
 
-    // Then sync with backend
+    // Rate limiting check
+    if (!favoriteRateLimiter.current.canCall()) {
+      console.warn('Favorite action rate limited');
+      return;
+    }
+
+    favoriteRateLimiter.current.recordCall();
+    setFavoriteLoading(true);
+
     try {
-      await favoritesService.toggleFavorite(listing.id);
+      await toggleListingFavorite(listing.id);
+      // Context handles optimistic updates and real-time sync
     } catch (error) {
       console.error('Error toggling favorite:', error);
-      // Revert on error
-      setIsFavorite(previousFavoriteState);
+    } finally {
+      setFavoriteLoading(false);
     }
   };
 
@@ -112,24 +112,28 @@ export const ListingCard: React.FC<ListingCardProps> = ({
         </Text>
       </View>
 
-      {/* Specifications */}
+      {/* Specifications - Individual White Cards */}
       <View style={styles.specsContainer}>
-        <View style={styles.specButton}>
-          <Ionicons name="speedometer-outline" size={16} color="#FFFFFF" />
-          <Text style={styles.specText}>{formatMileage(listing.mileage)}</Text>
+        <View style={styles.specCard}>
+          <Ionicons name="speedometer-outline" size={24} color="#181920" />
+          <Text style={styles.specText} numberOfLines={1}>
+            {formatMileage(listing.mileage)}
+          </Text>
         </View>
-        <View style={styles.specButton}>
-          <Ionicons name="calendar-outline" size={16} color="#FFFFFF" />
-          <Text style={styles.specText}>{listing.year}</Text>
+        <View style={styles.specCard}>
+          <Ionicons name="calendar-outline" size={24} color="#181920" />
+          <Text style={styles.specText} numberOfLines={1}>
+            {listing.year}
+          </Text>
         </View>
-        <View style={styles.specButton}>
-          <Ionicons name="settings-outline" size={16} color="#FFFFFF" />
+        <View style={styles.specCard}>
+          <Ionicons name="settings-outline" size={24} color="#181920" />
           <Text style={styles.specText} numberOfLines={1}>
             {listing.transmission || 'N/A'}
           </Text>
         </View>
-        <View style={styles.specButton}>
-          <Ionicons name="checkmark-circle-outline" size={16} color="#FFFFFF" />
+        <View style={styles.specCard}>
+          <Ionicons name="checkmark-circle-outline" size={24} color="#181920" />
           <Text style={styles.specText} numberOfLines={1}>
             {listing.condition || 'N/A'}
           </Text>
@@ -162,7 +166,8 @@ export const ListingCard: React.FC<ListingCardProps> = ({
         <TouchableOpacity
           style={[styles.favoriteButton, isFavorite && styles.favoriteButtonActive]}
           onPress={handleFavoritePress}
-          activeOpacity={0.8}
+          activeOpacity={favoriteLoading ? 1 : 0.8}
+          disabled={favoriteLoading}
         >
           <Ionicons
             name={isFavorite ? 'heart' : 'heart-outline'}
@@ -243,22 +248,23 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 12,
   },
-  specButton: {
+  specCard: {
     flex: 1,
-    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#181920',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 6,
-    gap: 4,
+    minHeight: 70,
   },
   specText: {
     fontSize: 11,
     fontFamily: 'Rubik',
-    fontWeight: '500',
-    color: '#FFFFFF',
+    fontWeight: '600',
+    color: '#181920',
+    marginTop: 6,
+    textAlign: 'center',
   },
   locationRow: {
     flexDirection: 'row',

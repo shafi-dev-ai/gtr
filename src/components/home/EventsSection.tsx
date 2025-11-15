@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Dimensions } from 'react-native';
 import { EventCard } from '../shared/EventCard';
 import { eventsService } from '../../services/events';
@@ -6,6 +6,8 @@ import { profilesService } from '../../services/profiles';
 import { EventWithCreator } from '../../types/event.types';
 import { useDataFetch } from '../../hooks/useDataFetch';
 import { RequestPriority } from '../../services/dataManager';
+import { useAuth } from '../../context/AuthContext';
+import { realtimeService } from '../../services/realtime';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - 48; // Screen width minus padding
@@ -27,6 +29,8 @@ export const EventsSection: React.FC<EventsSectionProps> = ({
   onSeeMorePress,
   onRefreshReady,
 }) => {
+  const { user } = useAuth();
+
   // Fetch events using DataManager
   const { data: allEvents, loading, refresh } = useDataFetch<EventWithCreator[]>({
     cacheKey: 'home:events:upcoming:5',
@@ -35,8 +39,6 @@ export const EventsSection: React.FC<EventsSectionProps> = ({
       return events;
     },
     priority: RequestPriority.HIGH,
-    ttl: 2 * 60 * 1000, // 2 minutes
-    staleWhileRevalidate: true,
   });
 
   // Fetch user profile for location filtering
@@ -44,27 +46,31 @@ export const EventsSection: React.FC<EventsSectionProps> = ({
     cacheKey: 'profile:current',
     fetchFn: () => profilesService.getCurrentUserProfile(),
     priority: RequestPriority.HIGH,
-    ttl: 10 * 60 * 1000,
   });
+
+  const visibleEvents = useMemo(() => {
+    if (!allEvents) return [];
+    if (!user?.id) return allEvents;
+    return allEvents.filter((event) => event.created_by !== user.id);
+  }, [allEvents, user?.id]);
 
   // Fetch RSVPs for events
   const { data: rsvpsByEvent } = useDataFetch<Record<string, any[]>>({
-    cacheKey: `home:events:rsvps:${allEvents?.map(e => e.id).join(',') || ''}`,
+    cacheKey: `home:events:rsvps:${visibleEvents?.map(e => e.id).join(',') || ''}`,
     fetchFn: async () => {
-      if (!allEvents || allEvents.length === 0) return {};
-      const eventIds = allEvents.slice(0, 5).map(e => e.id);
+      if (!visibleEvents || visibleEvents.length === 0) return {};
+      const eventIds = visibleEvents.slice(0, 5).map(e => e.id);
       return await eventsService.getBatchEventRSVPs(eventIds);
     },
     priority: RequestPriority.MEDIUM,
-    ttl: 2 * 60 * 1000,
-    enabled: !!allEvents && allEvents.length > 0,
+    enabled: !!visibleEvents && visibleEvents.length > 0,
   });
 
   // Sort and filter events based on location
   const sortedEvents = useMemo(() => {
-    if (!allEvents) return [];
+    if (!visibleEvents) return [];
     
-    let sorted = allEvents;
+    let sorted = visibleEvents;
     if (profile?.location) {
       const locationParts = profile.location.split(',').map(s => s.trim());
       const userCity = locationParts[0]?.toLowerCase();
@@ -74,7 +80,7 @@ export const EventsSection: React.FC<EventsSectionProps> = ({
         const locationEvents: EventWithCreator[] = [];
         const otherEvents: EventWithCreator[] = [];
 
-        allEvents.forEach((event) => {
+        visibleEvents.forEach((event) => {
           const eventLocation = event.location?.toLowerCase() || '';
           const matchesLocation =
             (userCity && eventLocation.includes(userCity)) ||
@@ -92,7 +98,7 @@ export const EventsSection: React.FC<EventsSectionProps> = ({
     }
 
     return sorted.slice(0, 5);
-  }, [allEvents, profile]);
+  }, [visibleEvents, profile]);
 
   // Map events with avatars
   const eventsWithAvatars = useMemo<EventWithAttendees[]>(() => {
@@ -110,8 +116,20 @@ export const EventsSection: React.FC<EventsSectionProps> = ({
     });
   }, [sortedEvents, rsvpsByEvent]);
 
+  // Subscribe to new events in real-time
+  useEffect(() => {
+    const unsubscribe = realtimeService.subscribeToNewEvents(() => {
+      // Refresh events when new ones are added
+      refresh();
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [refresh]);
+
   // Expose refresh function to parent
-  React.useEffect(() => {
+  useEffect(() => {
     if (onRefreshReady) {
       onRefreshReady(refresh);
     }

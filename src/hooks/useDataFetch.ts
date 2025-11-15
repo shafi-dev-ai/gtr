@@ -10,7 +10,6 @@ interface UseDataFetchOptions<T> {
   enabled?: boolean;
   onSuccess?: (data: T) => void;
   onError?: (error: any) => void;
-  staleWhileRevalidate?: boolean;
 }
 
 interface UseDataFetchResult<T> {
@@ -31,7 +30,6 @@ export function useDataFetch<T>(options: UseDataFetchOptions<T>): UseDataFetchRe
     enabled = true,
     onSuccess,
     onError,
-    staleWhileRevalidate = false,
   } = options;
 
   const [data, setData] = useState<T | null>(null);
@@ -53,9 +51,8 @@ export function useDataFetch<T>(options: UseDataFetchOptions<T>): UseDataFetchRe
   const fetchData = useCallback(async (forceRefresh = false) => {
     if (!enabled) return;
 
-    // If not forcing refresh, check cache first
     if (!forceRefresh && !skipCache) {
-      const cached = dataManager.getCache<T>(cacheKey);
+      const cached = await dataManager.getCache<T>(cacheKey);
       if (cached !== null) {
         setData(cached);
         setLoading(false);
@@ -68,46 +65,25 @@ export function useDataFetch<T>(options: UseDataFetchOptions<T>): UseDataFetchRe
     setError(null);
 
     try {
-      let result: T;
-
-      if (staleWhileRevalidate && !forceRefresh) {
-        // Stale-while-revalidate pattern
-        result = await dataManager.fetchWithStale(
-          cacheKey,
-          fetchFn,
-          {
-            priority,
-            ttl,
-            onStale: (staleData) => {
-              if (!cancelledRef.current) {
-                setData(staleData);
-                setLoading(false);
-              }
-            },
-          }
-        );
-      } else {
-        // Regular fetch
-        result = await dataManager.fetch(cacheKey, fetchFn, {
-          priority,
-          ttl,
-          skipCache: forceRefresh || skipCache,
-        });
-      }
+      const result = await dataManager.fetch(cacheKey, () => fetchFnRef.current(), {
+        priority,
+        ttl,
+        skipCache: forceRefresh || skipCache,
+      });
 
       if (!cancelledRef.current) {
         setData(result);
         setLoading(false);
-        onSuccess?.(result);
+        onSuccessRef.current?.(result);
       }
     } catch (err: any) {
       if (!cancelledRef.current) {
         setError(err);
         setLoading(false);
-        onError?.(err);
+        onErrorRef.current?.(err);
       }
     }
-  }, [cacheKey, fetchFn, priority, ttl, skipCache, enabled, staleWhileRevalidate, onSuccess, onError]);
+  }, [cacheKey, priority, ttl, skipCache, enabled]);
 
   const refetch = useCallback(async () => {
     await fetchData(false);
@@ -130,63 +106,28 @@ export function useDataFetch<T>(options: UseDataFetchOptions<T>): UseDataFetchRe
 
     cancelledRef.current = false;
 
-    // Check cache first - if exists, use it immediately
-    const cached = dataManager.getCache<T>(cacheKey);
-    if (cached !== null && !skipCache && !wasDisabled) {
-      // Only use cache if we weren't just enabled (to force fetch on first enable)
-      setData(cached);
-      setLoading(false);
-      
-      // If cache exists but might be stale, fetch fresh in background (stale-while-revalidate)
-      if (staleWhileRevalidate) {
-        // Fetch fresh in background without blocking
-        dataManager.fetch(cacheKey, () => fetchFnRef.current(), {
-          priority: RequestPriority.LOW,
-          ttl,
-          skipCache: true,
-        }).then((freshData) => {
-          if (!cancelledRef.current) {
-            setData(freshData);
-          }
-        }).catch(() => {
-          // Silently fail background refresh
-        });
-      }
-      return;
-    }
-
-    // No cache OR just enabled - fetch fresh data
-    setLoading(true);
-    setError(null);
-
-    const loadData = async () => {
-      try {
-        let result: T;
-
-        if (staleWhileRevalidate && cached !== null) {
-          // Use stale-while-revalidate if we have stale cache
-          result = await dataManager.fetchWithStale(
-            cacheKey,
-            () => fetchFnRef.current(),
-            {
-              priority,
-              ttl,
-              onStale: (staleData) => {
-                if (!cancelledRef.current) {
-                  setData(staleData);
-                  setLoading(false);
-                }
-              },
-            }
-          );
-        } else {
-          // Regular fetch
-          result = await dataManager.fetch(cacheKey, () => fetchFnRef.current(), {
-            priority,
-            ttl,
-            skipCache: false,
-          });
+    // Check cache and load data (async)
+    const initializeData = async () => {
+      // Check cache first
+      if (!skipCache) {
+        const cached = await dataManager.getCache<T>(cacheKey);
+        if (cached !== null && !wasDisabled) {
+          setData(cached);
+          setLoading(false);
+          return;
         }
+      }
+
+      // No cache OR just enabled - fetch fresh data
+      setLoading(true);
+      setError(null);
+
+      try {
+        const result = await dataManager.fetch(cacheKey, () => fetchFnRef.current(), {
+          priority,
+          ttl,
+          skipCache: false,
+        });
 
         if (!cancelledRef.current) {
           setData(result);
@@ -202,12 +143,12 @@ export function useDataFetch<T>(options: UseDataFetchOptions<T>): UseDataFetchRe
       }
     };
 
-    loadData();
+    initializeData();
 
     return () => {
       cancelledRef.current = true;
     };
-  }, [cacheKey, enabled, skipCache, staleWhileRevalidate, priority, ttl]); // Only stable dependencies
+  }, [cacheKey, enabled, skipCache, priority, ttl]); // Only stable dependencies
 
   return { data, loading, error, refetch, refresh };
 }

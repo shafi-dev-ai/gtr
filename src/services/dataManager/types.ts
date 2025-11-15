@@ -26,5 +26,8 @@ export interface DataManagerConfig {
   maxCacheSize: number; // Maximum number of cached entries
   backgroundFetchDelay: number; // Delay before starting background fetches (ms)
   requestTimeout: number; // Request timeout in milliseconds
+  maxConcurrentRequests?: number; // Maximum concurrent requests
+  maxRetries?: number; // Maximum retry attempts for failed requests
+  retryDelay?: number; // Delay between retries in milliseconds
 }
 

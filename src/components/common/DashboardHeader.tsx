@@ -26,8 +26,6 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
     cacheKey: 'profile:current',
     fetchFn: () => profilesService.getCurrentUserProfile(),
     priority: RequestPriority.HIGH,
-    ttl: 10 * 60 * 1000, // 10 minutes
-    staleWhileRevalidate: true,
     enabled: !!user,
   });
 

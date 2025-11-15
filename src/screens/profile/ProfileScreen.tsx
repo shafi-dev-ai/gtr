@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,29 +7,32 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Alert,
+  ActionSheetIOS,
+  Platform,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { authService } from '../../services/auth';
 import { profilesService } from '../../services/profiles';
 import { favoritesService } from '../../services/favorites';
 import { eventFavoritesService } from '../../services/eventFavorites';
 import { storageService } from '../../services/storage';
 import { supabase } from '../../services/supabase';
 import { Profile } from '../../types/profile.types';
-import { Alert, ActionSheetIOS, Platform } from 'react-native';
 import { useDataFetch } from '../../hooks/useDataFetch';
 import { RequestPriority } from '../../services/dataManager';
 import dataManager from '../../services/dataManager';
+import { realtimeService } from '../../services/realtime';
+import { useFavorites } from '../../context/FavoritesContext';
 
 interface ProfileScreenProps {
   navigation?: any;
 }
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
-  const { user, setIsAuthenticated } = useAuth();
+  const { user, logout } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
 
   // Fetch profile using DataManager - always fetch on mount if no cache
@@ -37,14 +40,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
     cacheKey: 'profile:current',
     fetchFn: () => profilesService.getCurrentUserProfile(),
     priority: RequestPriority.HIGH,
-    ttl: 10 * 60 * 1000, // 10 minutes
-    staleWhileRevalidate: true,
     skipCache: false, // Use cache if available, but fetch if not
   });
 
 
-  // Fetch stats using DataManager - always fetch on mount if no cache
+  // Fetch stats using DataManager - fetch once on mount/login, then use cache
   const statsCacheKey = user ? `profile:stats:${user.id}` : 'profile:stats:disabled';
+  
   const { data: stats, loading: statsLoading, refresh: refreshStats } = useDataFetch({
     cacheKey: statsCacheKey,
     fetchFn: async () => {
@@ -120,10 +122,80 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
       }
     },
     priority: RequestPriority.HIGH,
-    ttl: 5 * 60 * 1000, // 5 minutes
-    staleWhileRevalidate: true,
     enabled: !!user,
+    skipCache: false, // Use cache - will fetch only if cache is empty or expired
   });
+
+  const { listingFavoritesVersion, eventFavoritesVersion } = useFavorites();
+
+  // Track if we've already fetched stats for this user to prevent duplicate fetches
+  const hasFetchedStatsRef = useRef<string | null>(null);
+
+  // Force fetch stats when user becomes available (first time after login)
+  useEffect(() => {
+    // Reset ref when user logs out
+    if (!user?.id) {
+      hasFetchedStatsRef.current = null;
+      return;
+    }
+    
+    // If we've already fetched stats for this user, skip
+    if (hasFetchedStatsRef.current === user.id) return;
+    
+    // Check if cache exists - if not, fetch immediately
+    const checkAndFetchStats = async () => {
+      const cacheKey = `profile:stats:${user.id}`;
+      const cached = await dataManager.getCache(cacheKey);
+      
+      // If no cache exists, fetch immediately
+      if (cached === null) {
+        console.log('📊 No stats cache found, fetching stats for user:', user.id);
+        // Mark that we're fetching for this user
+        hasFetchedStatsRef.current = user.id;
+        // Invalidate cache to ensure fresh fetch
+        dataManager.invalidateCache(cacheKey);
+        // Force fetch stats (bypasses cache)
+        await refreshStats();
+      } else {
+        // Cache exists, mark as fetched
+        hasFetchedStatsRef.current = user.id;
+        console.log('📊 Stats cache found, using cached data');
+      }
+    };
+    
+    checkAndFetchStats();
+  }, [user?.id, refreshStats]);
+
+  // Subscribe to real-time updates that affect profile stats
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let unsubscribe: (() => void) | null = null;
+
+    const setupSubscription = async () => {
+      // Subscribe to user's own data changes (listings, events, posts, garage)
+      unsubscribe = await realtimeService.subscribeToUserDataChanges(user.id, () => {
+        // Refresh stats when user's data changes
+        refreshStats();
+      });
+    };
+
+    setupSubscription();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [user?.id, refreshStats]);
+
+  // Refresh stats when favorites change (via FavoritesContext version counters)
+  useEffect(() => {
+    if (user?.id && (listingFavoritesVersion > 0 || eventFavoritesVersion > 0)) {
+      dataManager.invalidateCache(`profile:stats:${user.id}`);
+      refreshStats();
+    }
+  }, [listingFavoritesVersion, eventFavoritesVersion, user?.id, refreshStats]);
 
   const loading = profileLoading || statsLoading;
   const defaultStats = {
@@ -203,7 +275,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
       const updatedProfile = await profilesService.updateAvatar(publicUrl);
       
       // Update cache and refresh
-      dataManager.setCache('profile:current', updatedProfile, 10 * 60 * 1000);
+      dataManager.setCache('profile:current', updatedProfile);
       await refreshProfile();
 
       // Show success message
@@ -257,33 +329,51 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
   };
 
   const handleMyListings = () => {
-    // TODO: Navigate to my listings screen
-    console.log('My listings');
+    if (navigation) {
+      navigation.navigate('MyListings');
+    } else {
+      console.log('My listings - navigation not available');
+    }
   };
 
   const handleMyEvents = () => {
-    // TODO: Navigate to my events screen
-    console.log('My events');
+    if (navigation) {
+      navigation.navigate('MyEvents');
+    } else {
+      console.log('My events - navigation not available');
+    }
   };
 
   const handleMyPosts = () => {
-    // TODO: Navigate to my posts screen
-    console.log('My posts');
+    if (navigation) {
+      navigation.navigate('MyForumPosts');
+    } else {
+      console.log('My posts - navigation not available');
+    }
   };
 
   const handleMyGarage = () => {
-    // TODO: Navigate to my garage screen
-    console.log('My garage');
+    if (navigation) {
+      navigation.navigate('MyGarage');
+    } else {
+      console.log('My garage - navigation not available');
+    }
   };
 
   const handleLikedListings = () => {
-    // TODO: Navigate to liked listings screen
-    console.log('Liked listings');
+    if (navigation) {
+      navigation.navigate('LikedListings');
+    } else {
+      console.log('Liked listings - navigation not available');
+    }
   };
 
   const handleLikedEvents = () => {
-    // TODO: Navigate to liked events screen
-    console.log('Liked events');
+    if (navigation) {
+      navigation.navigate('LikedEvents');
+    } else {
+      console.log('Liked events - navigation not available');
+    }
   };
 
   const handleSavedSearches = () => {
@@ -315,16 +405,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
   };
 
   const handleLogout = async () => {
-    try {
-      const { error } = await authService.signOut();
-      if (error) {
-        console.error('Logout error:', error);
-      } else {
-        setIsAuthenticated(false);
-      }
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
+    await logout();
   };
 
   // Show profile header immediately (don't wait for loading)
@@ -443,7 +524,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
           onPress={handleMyPosts}
         />
         <MenuItem
-          icon="garage-outline"
+          icon="car-sport-outline"
           label="My Garage"
           onPress={handleMyGarage}
         />

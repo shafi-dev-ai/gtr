@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Dimensions } from 'react-native';
 import { ForumPostCard } from '../shared/ForumPostCard';
 import { forumService } from '../../services/forum';
@@ -6,6 +6,8 @@ import { ForumPostWithUser, ForumCommentWithUser } from '../../types/forum.types
 import { useDataFetch } from '../../hooks/useDataFetch';
 import { useCriticalAction } from '../../hooks/useCriticalAction';
 import { RequestPriority } from '../../services/dataManager';
+import { realtimeService } from '../../services/realtime';
+import { useAuth } from '../../context/AuthContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - 48; // Screen width minus padding
@@ -27,38 +29,42 @@ export const ForumSection: React.FC<ForumSectionProps> = ({
   onRefreshReady,
 }) => {
   const [commentTexts, setCommentTexts] = useState<Record<string, string>>({});
+  const { user } = useAuth();
 
   // Fetch forum posts using DataManager
   const { data: allPosts, loading, refresh } = useDataFetch<ForumPostWithUser[]>({
     cacheKey: 'home:forum:recent:3',
     fetchFn: () => forumService.getAllPosts(3),
     priority: RequestPriority.HIGH,
-    ttl: 2 * 60 * 1000, // 2 minutes
-    staleWhileRevalidate: true,
   });
+
+  const visiblePosts = useMemo(() => {
+    if (!allPosts) return [];
+    if (!user?.id) return allPosts;
+    return allPosts.filter((post) => post.user_id !== user.id);
+  }, [allPosts, user?.id]);
 
   // Fetch comments for posts
   const { data: commentsByPost } = useDataFetch<Record<string, ForumCommentWithUser[]>>({
-    cacheKey: `home:forum:comments:${allPosts?.map(p => p.id).join(',') || ''}`,
+    cacheKey: `home:forum:comments:${visiblePosts?.map(p => p.id).join(',') || ''}`,
     fetchFn: async () => {
-      if (!allPosts || allPosts.length === 0) return {};
-      const postIds = allPosts.map(p => p.id);
+      if (!visiblePosts || visiblePosts.length === 0) return {};
+      const postIds = visiblePosts.map(p => p.id);
       return await forumService.getBatchPostComments(postIds);
     },
     priority: RequestPriority.MEDIUM,
-    ttl: 2 * 60 * 1000,
-    enabled: !!allPosts && allPosts.length > 0,
+    enabled: !!visiblePosts && visiblePosts.length > 0,
   });
 
   // Combine posts with comments
   const posts = useMemo<PostWithComments[]>(() => {
-    if (!allPosts) return [];
-    return allPosts.map(post => ({
+    if (!visiblePosts) return [];
+    return visiblePosts.map(post => ({
       ...post,
       comments: (commentsByPost?.[post.id] || []).slice(0, 2),
       commentText: commentTexts[post.id] || '',
     }));
-  }, [allPosts, commentsByPost, commentTexts]);
+  }, [visiblePosts, commentsByPost, commentTexts]);
 
   // Critical action for liking posts
   const { execute: executeLike } = useCriticalAction({
@@ -115,8 +121,20 @@ export const ForumSection: React.FC<ForumSectionProps> = ({
     }
   };
 
+  // Subscribe to new forum posts in real-time
+  useEffect(() => {
+    const unsubscribe = realtimeService.subscribeToNewForumPosts(() => {
+      // Refresh forum posts when new ones are added
+      refresh();
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [refresh]);
+
   // Expose refresh function to parent
-  React.useEffect(() => {
+  useEffect(() => {
     if (onRefreshReady) {
       onRefreshReady(refresh);
     }

@@ -1,29 +1,95 @@
 import { CacheEntry, DataManagerConfig } from './types';
+import { persistentCache } from '../persistentCache';
 
 class CacheManager {
   private cache: Map<string, CacheEntry> = new Map();
   private config: DataManagerConfig;
+  private persistentCacheEnabled: boolean = true;
 
   constructor(config: DataManagerConfig) {
     this.config = config;
+    // Load critical cache from persistent storage on startup (non-blocking)
+    this.loadPersistentCache().catch(() => {
+      // Silently fail - app can work without persistent cache
+    });
+  }
+
+  /**
+   * Load critical cache entries from persistent storage
+   */
+  private async loadPersistentCache(): Promise<void> {
+    if (!this.persistentCacheEnabled) return;
+
+    try {
+      // Load critical cache keys
+      const criticalKeys = [
+        'profile:current',
+        'home:listings:nearby:5',
+        'home:events:upcoming:5',
+        'home:forum:recent:3',
+      ];
+
+      for (const key of criticalKeys) {
+        const data = await persistentCache.get(key);
+        if (data !== null) {
+          this.cache.set(key, {
+            data,
+            timestamp: Date.now(),
+            ttl: this.config.cacheTTL,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading persistent cache:', error);
+    }
   }
 
   /**
    * Get cached data if available and not expired
+   * Also checks persistent cache if in-memory cache misses
    */
-  get<T>(key: string): T | null {
+  async get<T>(key: string): Promise<T | null> {
     const entry = this.cache.get(key);
-    if (!entry) return null;
+    if (entry) {
+      const now = Date.now();
+      const isExpired = now - entry.timestamp > entry.ttl;
 
-    const now = Date.now();
-    const isExpired = now - entry.timestamp > entry.ttl;
+      if (isExpired) {
+        this.cache.delete(key);
+        // Try persistent cache as fallback
+        if (this.persistentCacheEnabled) {
+          const persistentData = await persistentCache.get<T>(key);
+          if (persistentData !== null) {
+            // Restore to in-memory cache
+            this.cache.set(key, {
+              data: persistentData,
+              timestamp: Date.now(),
+              ttl: this.config.cacheTTL,
+            });
+            return persistentData;
+          }
+        }
+        return null;
+      }
 
-    if (isExpired) {
-      this.cache.delete(key);
-      return null;
+      return entry.data as T;
     }
 
-    return entry.data as T;
+    // Check persistent cache if in-memory cache misses
+    if (this.persistentCacheEnabled) {
+      const persistentData = await persistentCache.get<T>(key);
+      if (persistentData !== null) {
+        // Restore to in-memory cache
+        this.cache.set(key, {
+          data: persistentData,
+          timestamp: Date.now(),
+          ttl: this.config.cacheTTL,
+        });
+        return persistentData;
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -38,11 +104,32 @@ class CacheManager {
       }
     }
 
-    this.cache.set(key, {
+    const entry: CacheEntry<T> = {
       data,
       timestamp: Date.now(),
       ttl: ttl || this.config.cacheTTL,
-    });
+    };
+
+    this.cache.set(key, entry);
+
+    // Persist critical cache entries
+    if (this.persistentCacheEnabled && this.isCriticalKey(key)) {
+      persistentCache.set(key, data).catch(error => {
+        console.error('Error persisting cache:', error);
+      });
+    }
+  }
+
+  /**
+   * Check if key is critical and should be persisted
+   */
+  private isCriticalKey(key: string): boolean {
+    return (
+      key.startsWith('profile:') ||
+      key.startsWith('home:') ||
+      key.startsWith('user:listings:') ||
+      key.startsWith('user:events:')
+    );
   }
 
   /**
@@ -98,7 +185,18 @@ class CacheManager {
       }
     });
 
-    keysToDelete.forEach(key => this.cache.delete(key));
+    keysToDelete.forEach(key => {
+      this.cache.delete(key);
+      // Also remove from persistent cache
+      if (this.persistentCacheEnabled) {
+        persistentCache.remove(key).catch(() => {});
+      }
+    });
+
+    // Also invalidate persistent cache pattern
+    if (this.persistentCacheEnabled) {
+      persistentCache.removePattern(regex).catch(() => {});
+    }
   }
 
   /**
@@ -106,6 +204,9 @@ class CacheManager {
    */
   clear(): void {
     this.cache.clear();
+    if (this.persistentCacheEnabled) {
+      persistentCache.clear().catch(() => {});
+    }
   }
 
   /**

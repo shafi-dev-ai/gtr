@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ForumPostWithUser, ForumCommentWithUser } from '../../types/forum.types';
 import { CommentCard } from './CommentCard';
+import { forumService } from '../../services/forum';
+import { realtimeService } from '../../services/realtime';
+import { RateLimiter } from '../../utils/throttle';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - 48; // Screen width minus padding
@@ -34,9 +37,58 @@ export const ForumPostCard: React.FC<ForumPostCardProps> = ({
   onReply,
 }) => {
   const [isLiked, setIsLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(post.like_count || 0);
+  
+  // Rate limiter: max 10 like actions per 10 seconds
+  const likeRateLimiter = useRef(new RateLimiter(10, 10000));
+
+  // Check like status on mount and subscribe to real-time updates
+  useEffect(() => {
+    let unsubscribe: (() => void) | null = null;
+
+    const checkLikeStatus = async () => {
+      try {
+        const liked = await forumService.hasUserLikedPost(post.id);
+        setIsLiked(liked);
+        setLikeCount(post.like_count || 0);
+
+        // Subscribe to real-time updates
+        unsubscribe = await realtimeService.subscribeToPostLike(
+          post.id,
+          (isLiked, count) => {
+            setIsLiked(isLiked);
+            setLikeCount(count);
+          }
+        );
+      } catch (error) {
+        console.error('Error checking like status:', error);
+      }
+    };
+
+    checkLikeStatus();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [post.id, post.like_count]);
 
   const handleLike = () => {
-    setIsLiked(!isLiked);
+    // Rate limiting check
+    if (!likeRateLimiter.current.canCall()) {
+      console.warn('Like action rate limited');
+      return;
+    }
+
+    likeRateLimiter.current.recordCall();
+
+    const previousLiked = isLiked;
+    const previousCount = likeCount;
+    
+    // Optimistic update
+    setIsLiked(!previousLiked);
+    setLikeCount(previousLiked ? previousCount - 1 : previousCount + 1);
     onLike?.();
   };
 

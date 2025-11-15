@@ -4,10 +4,13 @@ import CacheManager from './CacheManager';
 import RequestDeduplicator from './RequestDeduplicator';
 
 const DEFAULT_CONFIG: DataManagerConfig = {
-  cacheTTL: 5 * 60 * 1000, // 5 minutes
+  cacheTTL: Number.MAX_SAFE_INTEGER,
   maxCacheSize: 100,
   backgroundFetchDelay: 1000, // 1 second delay before background fetches
-  requestTimeout: 30000, // 30 seconds
+  requestTimeout: 10000, // 10 seconds (reduced from 30s for faster failure detection)
+  maxConcurrentRequests: 5, // Limit concurrent requests
+  maxRetries: 2, // Retry failed requests up to 2 times
+  retryDelay: 1000, // 1 second delay between retries
 };
 
 class DataManager {
@@ -16,9 +19,12 @@ class DataManager {
   private deduplicator: RequestDeduplicator;
   private config: DataManagerConfig;
   private requestIdCounter = 0;
+  private activeRequests = 0;
+  private maxConcurrentRequests: number;
 
   constructor(config: Partial<DataManagerConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.maxConcurrentRequests = this.config.maxConcurrentRequests || 5;
     this.priorityQueue = new PriorityQueue();
     this.cacheManager = new CacheManager(this.config);
     this.deduplicator = new RequestDeduplicator();
@@ -46,7 +52,7 @@ class DataManager {
 
     // Check cache first (unless skipCache is true)
     if (!skipCache) {
-      const cached = this.cacheManager.get<T>(cacheKey);
+      const cached = await this.cacheManager.get<T>(cacheKey);
       if (cached !== null) {
         return cached;
       }
@@ -63,7 +69,7 @@ class DataManager {
   }
 
   /**
-   * Execute fetch through priority queue
+   * Execute fetch through priority queue with retry logic and concurrent limiting
    */
   private async executeFetch<T>(
     cacheKey: string,
@@ -78,10 +84,54 @@ class DataManager {
         id: requestId,
         priority,
         fetchFn: async () => {
-          const result = await this.withTimeout(fetchFn(), this.config.requestTimeout);
-          // Cache the result
-          this.cacheManager.set(cacheKey, result, ttl);
-          return result;
+          // Wait if we're at max concurrent requests
+          while (this.activeRequests >= this.maxConcurrentRequests) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+
+          this.activeRequests++;
+          let lastError: any;
+
+          try {
+            // Retry logic
+            const maxRetries = this.config.maxRetries || 2;
+            for (let attempt = 0; attempt <= maxRetries; attempt++) {
+              try {
+                const result = await this.withTimeout(
+                  fetchFn(),
+                  this.config.requestTimeout
+                );
+                // Cache the result
+                this.cacheManager.set(cacheKey, result, ttl);
+                this.activeRequests--;
+                return result;
+              } catch (error: any) {
+                lastError = error;
+                
+                // Don't retry on certain errors (auth errors, validation errors)
+                if (error?.message?.includes('timeout') || 
+                    error?.message?.includes('network') ||
+                    error?.code === 'ECONNABORTED') {
+                  // Retry network/timeout errors
+                  if (attempt < maxRetries) {
+                    await new Promise(resolve => 
+                      setTimeout(resolve, this.config.retryDelay || 1000)
+                    );
+                    continue;
+                  }
+                } else {
+                  // Don't retry other errors
+                  throw error;
+                }
+              }
+            }
+            
+            // All retries failed
+            throw lastError;
+          } catch (error) {
+            this.activeRequests--;
+            throw error;
+          }
         },
         resolve,
         reject,
@@ -225,8 +275,8 @@ class DataManager {
   /**
    * Get cache entry
    */
-  getCache<T>(key: string): T | null {
-    return this.cacheManager.get<T>(key);
+  async getCache<T>(key: string): Promise<T | null> {
+    return await this.cacheManager.get<T>(key);
   }
 
   /**
@@ -244,15 +294,25 @@ class DataManager {
   }
 
   /**
-   * Add timeout to promise
+   * Add timeout to promise with better error handling
    */
   private async withTimeout<T>(promise: Promise<T>, timeout: number): Promise<T> {
-    return Promise.race([
-      promise,
-      new Promise<T>((_, reject) =>
-        setTimeout(() => reject(new Error('Request timeout')), timeout)
-      ),
-    ]);
+    let timeoutId: NodeJS.Timeout;
+    
+    const timeoutPromise = new Promise<T>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`Request timeout after ${timeout}ms`));
+      }, timeout);
+    });
+
+    try {
+      const result = await Promise.race([promise, timeoutPromise]);
+      clearTimeout(timeoutId!);
+      return result;
+    } catch (error) {
+      clearTimeout(timeoutId!);
+      throw error;
+    }
   }
 
   /**

@@ -1,15 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ListingWithImages } from '../../types/listing.types';
-import { favoritesService } from '../../services/favorites';
+import { useFavorites } from '../../context/FavoritesContext';
+import { RateLimiter } from '../../utils/throttle';
 
 interface ListingCardVerticalProps {
   listing: ListingWithImages;
   onPress?: () => void;
   onChatPress?: () => void;
   onFavorite?: () => void;
+  mode?: 'default' | 'owner';
+  onToggleStatus?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  statusLoading?: boolean;
+  deleteLoading?: boolean;
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -19,22 +26,22 @@ export const ListingCardVertical: React.FC<ListingCardVerticalProps> = ({
   onPress,
   onChatPress,
   onFavorite,
+  mode = 'default',
+  onToggleStatus,
+  onEdit,
+  onDelete,
+  statusLoading = false,
+  deleteLoading = false,
 }) => {
-  const [isFavorite, setIsFavorite] = useState(false);
+  const { isListingFavorited, toggleListingFavorite } = useFavorites();
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const isOwnerMode = mode === 'owner';
+  
+  // Rate limiter: max 5 favorite actions per 10 seconds
+  const favoriteRateLimiter = useRef(new RateLimiter(5, 10000));
 
-  // Check favorite status on mount
-  useEffect(() => {
-    const checkFavoriteStatus = async () => {
-      try {
-        const favorited = await favoritesService.hasUserFavorited(listing.id);
-        setIsFavorite(favorited);
-      } catch (error) {
-        console.error('Error checking favorite status:', error);
-      }
-    };
-
-    checkFavoriteStatus();
-  }, [listing.id]);
+  // Get favorite status from context
+  const isFavorite = isOwnerMode ? false : isListingFavorited(listing.id);
 
   const primaryImage = listing.listing_images?.find(img => img.is_primary)?.image_url 
     || listing.listing_images?.[0]?.image_url 
@@ -43,18 +50,24 @@ export const ListingCardVertical: React.FC<ListingCardVerticalProps> = ({
   const location = listing.location || `${listing.city || ''}, ${listing.state || ''}`.trim() || 'Location not specified';
 
   const handleFavoritePress = async () => {
-    // Optimistic update - update UI immediately
-    const previousFavoriteState = isFavorite;
-    setIsFavorite(!previousFavoriteState);
-    onFavorite?.();
+    if (favoriteLoading || isOwnerMode) return;
 
-    // Then sync with backend
+    // Rate limiting check
+    if (!favoriteRateLimiter.current.canCall()) {
+      console.warn('Favorite action rate limited');
+      return;
+    }
+
+    favoriteRateLimiter.current.recordCall();
+    setFavoriteLoading(true);
+
     try {
-      await favoritesService.toggleFavorite(listing.id);
+      await toggleListingFavorite(listing.id);
+      // Context handles optimistic updates and real-time sync
     } catch (error) {
       console.error('Error toggling favorite:', error);
-      // Revert on error
-      setIsFavorite(previousFavoriteState);
+    } finally {
+      setFavoriteLoading(false);
     }
   };
 
@@ -83,17 +96,20 @@ export const ListingCardVertical: React.FC<ListingCardVerticalProps> = ({
           style={styles.carImage}
           contentFit="cover"
         />
-        <TouchableOpacity
-          style={styles.favoriteButton}
-          onPress={handleFavoritePress}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name={isFavorite ? 'heart' : 'heart-outline'}
-            size={20}
-            color={isFavorite ? '#DC143C' : '#FFFFFF'}
-          />
-        </TouchableOpacity>
+        {!isOwnerMode && (
+          <TouchableOpacity
+            style={styles.favoriteButton}
+            onPress={handleFavoritePress}
+            activeOpacity={favoriteLoading ? 1 : 0.8}
+            disabled={favoriteLoading}
+          >
+            <Ionicons
+              name={isFavorite ? 'heart' : 'heart-outline'}
+              size={20}
+              color={isFavorite ? '#DC143C' : '#FFFFFF'}
+            />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Content */}
@@ -103,29 +119,52 @@ export const ListingCardVertical: React.FC<ListingCardVerticalProps> = ({
           <Text style={styles.carName} numberOfLines={1}>
             {listing.model} {listing.year}
           </Text>
-          <Text style={styles.price}>
-            {formatPrice(listing.price)} $
-          </Text>
+          <View style={styles.headerRight}>
+            {isOwnerMode && (
+              <View
+                style={[
+                  styles.statusChip,
+                  listing.status === 'sold' ? styles.statusChipSold : styles.statusChipActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusChipText,
+                    listing.status === 'sold' ? styles.statusChipTextSold : styles.statusChipTextActive,
+                  ]}
+                >
+                  {listing.status === 'sold' ? 'Sold' : 'Active'}
+                </Text>
+              </View>
+            )}
+            <Text style={styles.price}>
+              {formatPrice(listing.price)} $
+            </Text>
+          </View>
         </View>
 
-        {/* Specifications */}
+        {/* Specifications - Individual White Cards */}
         <View style={styles.specsContainer}>
-          <View style={styles.specButton}>
-            <Ionicons name="speedometer-outline" size={16} color="#FFFFFF" />
-            <Text style={styles.specText}>{formatMileage(listing.mileage)}</Text>
+          <View style={styles.specCard}>
+            <Ionicons name="speedometer-outline" size={24} color="#181920" />
+            <Text style={styles.specText} numberOfLines={1}>
+              {formatMileage(listing.mileage)}
+            </Text>
           </View>
-          <View style={styles.specButton}>
-            <Ionicons name="calendar-outline" size={16} color="#FFFFFF" />
-            <Text style={styles.specText}>{listing.year}</Text>
+          <View style={styles.specCard}>
+            <Ionicons name="calendar-outline" size={24} color="#181920" />
+            <Text style={styles.specText} numberOfLines={1}>
+              {listing.year}
+            </Text>
           </View>
-          <View style={styles.specButton}>
-            <Ionicons name="settings-outline" size={16} color="#FFFFFF" />
+          <View style={styles.specCard}>
+            <Ionicons name="settings-outline" size={24} color="#181920" />
             <Text style={styles.specText} numberOfLines={1}>
               {listing.transmission || 'N/A'}
             </Text>
           </View>
-          <View style={styles.specButton}>
-            <Ionicons name="checkmark-circle-outline" size={16} color="#FFFFFF" />
+          <View style={styles.specCard}>
+            <Ionicons name="checkmark-circle-outline" size={24} color="#181920" />
             <Text style={styles.specText} numberOfLines={1}>
               {listing.condition || 'N/A'}
             </Text>
@@ -145,15 +184,51 @@ export const ListingCardVertical: React.FC<ListingCardVerticalProps> = ({
           </Text>
         )}
 
-        {/* Chat Button */}
-        <TouchableOpacity
-          style={styles.chatButton}
-          onPress={onChatPress}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="chatbubble-outline" size={18} color="#181920" />
-          <Text style={styles.chatButtonText}>Chat now</Text>
-        </TouchableOpacity>
+        {/* Actions */}
+        {isOwnerMode ? (
+          <View style={styles.ownerActions}>
+            <TouchableOpacity
+              style={[styles.ownerButton, styles.ownerPrimaryButton]}
+              onPress={onToggleStatus}
+              disabled={statusLoading}
+            >
+              {statusLoading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={[styles.ownerButtonText, styles.ownerPrimaryButtonText]}>
+                  {listing.status === 'sold' ? 'Mark Active' : 'Mark Sold'}
+                </Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.ownerButton, styles.ownerSecondaryButton]}
+              onPress={onEdit}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.ownerButtonText, styles.ownerSecondaryButtonText]}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.ownerButton, styles.ownerDangerButton]}
+              onPress={onDelete}
+              disabled={deleteLoading}
+            >
+              {deleteLoading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={[styles.ownerButtonText, styles.ownerDangerButtonText]}>Delete</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.chatButton}
+            onPress={onChatPress}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="chatbubble-outline" size={18} color="#181920" />
+            <Text style={styles.chatButtonText}>Chat now</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -196,6 +271,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 12,
+  },
   carName: {
     fontSize: 20,
     fontFamily: 'Rubik',
@@ -208,29 +289,55 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik',
     fontWeight: '700',
     color: '#FFFFFF',
-    marginLeft: 12,
+  },
+  statusChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  statusChipActive: {
+    backgroundColor: 'rgba(76, 217, 100, 0.15)',
+    borderColor: '#4CD964',
+  },
+  statusChipSold: {
+    backgroundColor: 'rgba(128, 128, 128, 0.2)',
+    borderColor: '#808080',
+  },
+  statusChipText: {
+    fontSize: 12,
+    fontFamily: 'Rubik',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  statusChipTextActive: {
+    color: '#4CD964',
+  },
+  statusChipTextSold: {
+    color: '#CCCCCC',
   },
   specsContainer: {
     flexDirection: 'row',
     gap: 8,
     marginBottom: 12,
   },
-  specButton: {
+  specCard: {
     flex: 1,
-    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#181920',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 6,
-    gap: 4,
+    minHeight: 70,
   },
   specText: {
     fontSize: 11,
     fontFamily: 'Rubik',
-    fontWeight: '500',
-    color: '#FFFFFF',
+    fontWeight: '600',
+    color: '#181920',
+    marginTop: 6,
+    textAlign: 'center',
   },
   locationRow: {
     flexDirection: 'row',
@@ -266,6 +373,46 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik',
     fontWeight: '600',
     color: '#181920',
+  },
+  ownerActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  ownerButton: {
+    flexGrow: 1,
+    flexBasis: '30%',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ownerButtonText: {
+    fontSize: 14,
+    fontFamily: 'Rubik',
+    fontWeight: '600',
+  },
+  ownerPrimaryButton: {
+    backgroundColor: '#DC143C',
+  },
+  ownerPrimaryButtonText: {
+    color: '#FFFFFF',
+  },
+  ownerSecondaryButton: {
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+    backgroundColor: 'transparent',
+  },
+  ownerSecondaryButtonText: {
+    color: '#FFFFFF',
+  },
+  ownerDangerButton: {
+    backgroundColor: '#2A2D3A',
+    borderWidth: 1,
+    borderColor: '#DC143C',
+  },
+  ownerDangerButtonText: {
+    color: '#DC143C',
   },
 });
 

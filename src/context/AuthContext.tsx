@@ -2,11 +2,14 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { authService } from '../services/auth';
 import { initializationService } from '../services/initialization';
+import { realtimeService } from '../services/realtime';
 
 interface AuthContextType {
   isAuthenticated: boolean;
   setIsAuthenticated: (value: boolean) => void;
   isLoading: boolean;
+  isLoggingOut: boolean;
+  logout: () => Promise<void>;
   session: Session | null;
   user: any;
 }
@@ -16,8 +19,33 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<any>(null);
+
+  const logout = async () => {
+    setIsLoggingOut(true);
+    try {
+      // Clear cache and real-time subscriptions before logout
+      initializationService.clearAll();
+      realtimeService.cleanup();
+      
+      // Sign out
+      const { error } = await authService.signOut();
+      if (error) {
+        console.error('Logout error:', error);
+      } else {
+        setIsAuthenticated(false);
+      }
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      // Small delay to ensure cleanup completes
+      setTimeout(() => {
+        setIsLoggingOut(false);
+      }, 500);
+    }
+  };
 
   useEffect(() => {
     // Get initial session
@@ -47,8 +75,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Don't block login if initialization fails
         }
       } else {
-        // Clear cache on logout
+        // Clear cache and real-time subscriptions on logout
+        // (Already done in logout function, but keep here as backup)
         initializationService.clearAll();
+        realtimeService.cleanup();
       }
     });
 
@@ -58,7 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, setIsAuthenticated, isLoading, session, user }}>
+    <AuthContext.Provider value={{ isAuthenticated, setIsAuthenticated, isLoading, isLoggingOut, logout, session, user }}>
       {children}
     </AuthContext.Provider>
   );
