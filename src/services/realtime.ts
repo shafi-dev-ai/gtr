@@ -405,6 +405,61 @@ class RealtimeService {
   }
 
   /**
+   * Subscribe to RSVP changes for a specific event
+   */
+  subscribeToEventRSVPs(
+    eventId: string,
+    callback: () => void
+  ): UnsubscribeFn {
+    const channelKey = `event_rsvps_${eventId}`;
+    
+    if (this.subscriptions.has(channelKey)) {
+      this.subscriptions.get(channelKey).unsubscribe();
+    }
+
+    const channel = supabase
+      .channel(channelKey)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'event_rsvps',
+          filter: `event_id=eq.${eventId}`,
+        },
+        () => {
+          callback();
+          // Invalidate event-related caches
+          dataManager.invalidateCache(/^home:events/);
+          dataManager.invalidateCache(/^user:events/);
+          dataManager.invalidateCache(new RegExp(`.*events:rsvps.*${eventId}.*`));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'events',
+          filter: `id=eq.${eventId}`,
+        },
+        () => {
+          callback();
+          dataManager.invalidateCache(/^home:events/);
+          dataManager.invalidateCache(/^user:events/);
+        }
+      )
+      .subscribe();
+
+    this.subscriptions.set(channelKey, channel);
+
+    return () => {
+      supabase.removeChannel(channel);
+      this.subscriptions.delete(channelKey);
+    };
+  }
+
+  /**
    * Subscribe to listing updates (status changes, etc.)
    */
   subscribeToListingUpdates(
@@ -524,6 +579,44 @@ class RealtimeService {
   }
 
   /**
+   * Subscribe to notifications for current user
+   */
+  async subscribeToNotifications(
+    callback: () => void
+  ): Promise<UnsubscribeFn> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return () => {};
+
+    const baseChannelKey = `notifications_${user.id}`;
+    const uniqueChannelKey = `${baseChannelKey}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const channel = supabase
+      .channel(uniqueChannelKey)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          callback();
+          // Invalidate notification cache
+          dataManager.invalidateCache(/^notifications/);
+        }
+      )
+      .subscribe();
+
+    this.subscriptions.set(uniqueChannelKey, channel);
+
+    return () => {
+      supabase.removeChannel(channel);
+      this.subscriptions.delete(uniqueChannelKey);
+    };
+  }
+
+  /**
    * Cleanup all subscriptions
    */
   cleanup(): void {
@@ -535,4 +628,3 @@ class RealtimeService {
 }
 
 export const realtimeService = new RealtimeService();
-

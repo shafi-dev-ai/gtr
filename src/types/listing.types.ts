@@ -9,10 +9,12 @@ export interface Listing {
   mileage: number | null;
   description: string | null;
   condition: string | null;
+  country: string | null; // ISO country code (e.g., 'US', 'CA', 'GB')
+  state: string | null; // State/Province (dependent on country)
   city: string | null;
-  state: string | null;
   zip_code: string | null;
-  location: string | null;
+  street_address: string | null; // Custom street address
+  location: string | null; // Full location string (kept for backward compatibility)
   vin: string | null;
   color: string | null;
   transmission: string | null;
@@ -48,10 +50,12 @@ export interface CreateListingData {
   mileage?: number;
   description?: string;
   condition?: string;
+  country?: string; // ISO country code (e.g., 'US', 'CA', 'GB')
+  state?: string; // State/Province (dependent on country)
   city?: string;
-  state?: string;
   zip_code?: string;
-  location?: string;
+  street_address?: string; // Custom street address
+  location?: string; // Full location string (kept for backward compatibility)
   vin?: string;
   color?: string;
   transmission?: string;

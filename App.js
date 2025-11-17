@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -21,6 +21,7 @@ import { MyForumPostsScreen } from './src/screens/profile/MyForumPostsScreen';
 import { MyGarageScreen } from './src/screens/profile/MyGarageScreen';
 import { LikedListingsScreen } from './src/screens/profile/LikedListingsScreen';
 import { LikedEventsScreen } from './src/screens/profile/LikedEventsScreen';
+import { NotificationScreen } from './src/screens/notifications/NotificationScreen';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { conditionalStorage } from './src/services/sessionStorage';
 
@@ -58,6 +59,7 @@ const AppStack = () => {
       <Stack.Screen name="MyGarage" component={MyGarageScreen} />
       <Stack.Screen name="LikedListings" component={LikedListingsScreen} />
       <Stack.Screen name="LikedEvents" component={LikedEventsScreen} />
+      <Stack.Screen name="Notification" component={NotificationScreen} />
     </Stack.Navigator>
   );
 };
@@ -115,6 +117,9 @@ const RootNavigator = () => {
 };
 
 export default function App() {
+  const notificationListener = useRef(null);
+  const responseListener = useRef(null);
+
   useEffect(() => {
     // Handle app state changes to clear non-persistent sessions
     const subscription = AppState.addEventListener('change', (nextAppState) => {
@@ -129,8 +134,63 @@ export default function App() {
       }
     });
 
+    // Set up push notification listeners (only if available)
+    const setupNotifications = async () => {
+      try {
+        const Notifications = require('expo-notifications');
+        
+        notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
+          console.log('Notification received:', notification);
+          // You can handle foreground notifications here
+        });
+
+        responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
+          console.log('Notification tapped:', response);
+          const data = response.notification.request.content.data;
+          
+          // Navigate based on notification data
+          if (navigationRef.isReady() && data) {
+            if (data.listing_id) {
+              // TODO: Navigate to listing detail
+              console.log('Navigate to listing:', data.listing_id);
+            } else if (data.event_id) {
+              // TODO: Navigate to event detail
+              console.log('Navigate to event:', data.event_id);
+            } else if (data.post_id) {
+              // TODO: Navigate to forum post
+              console.log('Navigate to forum post:', data.post_id);
+            } else if (data.conversation_id) {
+              // TODO: Navigate to conversation
+              console.log('Navigate to conversation:', data.conversation_id);
+            }
+          }
+        });
+      } catch (error) {
+        console.warn('Push notifications not available (likely Expo Go):', error);
+        // App will continue to work without push notifications
+      }
+    };
+    
+    setupNotifications();
+
     return () => {
       subscription.remove();
+      if (notificationListener.current) {
+        try {
+          const Notifications = require('expo-notifications');
+          Notifications.removeNotificationSubscription(notificationListener.current);
+        } catch (error) {
+          // Ignore - notifications not available
+        }
+      }
+      if (responseListener.current) {
+        try {
+          const Notifications = require('expo-notifications');
+          Notifications.removeNotificationSubscription(responseListener.current);
+        } catch (error) {
+          // Ignore - notifications not available
+        }
+      }
     };
   }, []);
 

@@ -199,7 +199,7 @@ export const eventsService = {
     const result: Record<string, EventRSVPWithUser[]> = {};
     
     eventIds.forEach(eventId => {
-      const eventRSVPs = rsvps.filter(r => r.event_id === eventId).slice(0, 3); // Limit to 3 per event
+      const eventRSVPs = rsvps.filter(r => r.event_id === eventId).slice(0, 5); // Limit to 5 per event
       result[eventId] = eventRSVPs.map(rsvp => {
         const profile = profiles?.find(p => p.id === rsvp.user_id);
         return {
@@ -293,6 +293,35 @@ export const eventsService = {
 
     if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows returned
     return data || null;
+  },
+
+  /**
+   * Delete an event (only by creator)
+   */
+  async deleteEvent(eventId: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Verify user is the creator
+    const { data: event, error: fetchError } = await supabase
+      .from('events')
+      .select('created_by')
+      .eq('id', eventId)
+      .single();
+
+    if (fetchError) throw fetchError;
+    if (!event) throw new Error('Event not found');
+    if (event.created_by !== user.id) {
+      throw new Error('Only the event creator can delete this event');
+    }
+
+    // Delete the event (cascade will delete RSVPs)
+    const { error } = await supabase
+      .from('events')
+      .delete()
+      .eq('id', eventId);
+
+    if (error) throw error;
   },
 };
 

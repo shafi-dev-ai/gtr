@@ -34,8 +34,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
   };
 
   const handleNotificationPress = () => {
-    // TODO: Navigate to notifications screen
-    console.log('Notifications pressed');
+    if (navigation) {
+      navigation.navigate('Notification' as never);
+    } else {
+      console.log('Notifications pressed - navigation not available');
+    }
   };
 
   const handleMessagePress = () => {

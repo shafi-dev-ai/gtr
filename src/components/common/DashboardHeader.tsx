@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,8 @@ import { profilesService } from '../../services/profiles';
 import { Profile } from '../../types/profile.types';
 import { useDataFetch } from '../../hooks/useDataFetch';
 import { RequestPriority } from '../../services/dataManager';
+import { notificationsService } from '../../services/notifications';
+import { realtimeService } from '../../services/realtime';
 
 interface DashboardHeaderProps {
   onNotificationPress?: () => void;
@@ -18,8 +20,57 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   onMessagePress,
 }) => {
   const { user } = useAuth();
-  const [notificationCount, setNotificationCount] = useState(1); // TODO: Get from actual notifications
-  const [messageCount, setMessageCount] = useState(1); // TODO: Get from actual messages
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [messageCount, setMessageCount] = useState(0); // TODO: Get from actual messages
+
+  // Fetch unread notification count
+  const { data: unreadCount, refresh: refreshNotificationCount } = useDataFetch<number>({
+    cacheKey: 'notifications:unread_count',
+    fetchFn: () => notificationsService.getUnreadCount(),
+    priority: RequestPriority.MEDIUM,
+    enabled: !!user,
+  });
+
+  // Subscribe to real-time notification updates
+  useEffect(() => {
+    if (!user) return;
+
+    let unsubscribe: (() => void) | null = null;
+
+    const setupSubscription = async () => {
+      unsubscribe = await realtimeService.subscribeToNotifications(() => {
+        refreshNotificationCount();
+      });
+    };
+
+    setupSubscription();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [user, refreshNotificationCount]);
+
+  // Update notification count when data changes
+  useEffect(() => {
+    if (unreadCount !== undefined) {
+      setNotificationCount(unreadCount);
+      // Update badge count on app icon (only if push notifications are available)
+      const updateBadge = async () => {
+        try {
+          const { pushNotificationService } = await import('../../services/pushNotifications');
+          if (pushNotificationService.isAvailable()) {
+            await pushNotificationService.setBadgeCount(unreadCount);
+          }
+        } catch (error) {
+          // Silently fail - push notifications may not be available in Expo Go
+          console.warn('Badge count update skipped (push notifications not available)');
+        }
+      };
+      updateBadge();
+    }
+  }, [unreadCount]);
 
   // Fetch profile using DataManager cache
   const { data: profile } = useDataFetch<Profile | null>({
@@ -158,4 +209,3 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
-

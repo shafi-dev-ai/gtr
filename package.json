@@ -8,7 +8,10 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "android:device": "expo run:android --device",
-    "android:build": "expo run:android"
+    "android:build": "expo run:android",
+    "prebuild:ios": "expo prebuild --platform ios",
+    "prebuild:android": "expo prebuild --platform android",
+    "check:size": "node -e \"const fs=require('fs');function getSize(p){try{const s=fs.statSync(p);return (s.size/(1024*1024)).toFixed(2)+' MB';}catch{return 'Not found';}}console.log('iOS .ipa:',getSize('ios/build/gtr.ipa'));console.log('Android APK:',getSize('android/app/build/outputs/apk/release/app-release.apk'));console.log('Android AAB:',getSize('android/app/build/outputs/bundle/release/app-release.aab'));\""
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -23,6 +26,7 @@
     "expo-image-manipulator": "~14.0.7",
     "expo-image-picker": "~17.0.8",
     "expo-linking": "~8.0.8",
+    "expo-notifications": "~0.32.13",
     "expo-status-bar": "~3.0.8",
     "react": "19.1.0",
     "react-native": "0.81.5",

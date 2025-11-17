@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -16,12 +17,13 @@ import { eventsService } from '../../services/events';
 import { EventWithCreator } from '../../types/event.types';
 import { EventCard } from '../../components/shared/EventCard';
 import { useDataFetch } from '../../hooks/useDataFetch';
-import { RequestPriority } from '../../services/dataManager';
+import dataManager, { RequestPriority } from '../../services/dataManager';
 
 export const MyEventsScreen: React.FC = () => {
   const navigation = useNavigation();
   const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
+  const [deleteProcessingId, setDeleteProcessingId] = useState<string | null>(null);
 
   const { data: events, loading, refresh } = useDataFetch<EventWithCreator[]>({
     cacheKey: `user:events:${user?.id || ''}`,
@@ -44,6 +46,48 @@ export const MyEventsScreen: React.FC = () => {
   const handleFavorite = () => {
     // Refresh events after favorite
     refresh();
+  };
+
+  const invalidateEventCaches = useCallback(() => {
+    dataManager.invalidateCache(new RegExp(`^user:events:${user?.id || ''}`));
+    dataManager.invalidateCache(/^home:events/);
+  }, [user?.id]);
+
+  const handleDeleteEvent = useCallback(
+    (event: EventWithCreator) => {
+      Alert.alert(
+        'Delete Event',
+        'Are you sure you want to delete this event? This action cannot be undone and all RSVPs will be removed.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              setDeleteProcessingId(event.id);
+              try {
+                await eventsService.deleteEvent(event.id);
+                invalidateEventCaches();
+                await refresh();
+              } catch (error) {
+                console.error('Error deleting event:', error);
+                Alert.alert('Delete failed', 'Could not delete the event. Please try again.');
+              } finally {
+                setDeleteProcessingId(null);
+              }
+            },
+          },
+        ]
+      );
+    },
+    [invalidateEventCaches, refresh]
+  );
+
+  const handleEditEvent = (event: EventWithCreator) => {
+    Alert.alert(
+      'Edit Event',
+      'Editing events will be available soon. For now, please contact support to make changes.'
+    );
   };
 
   return (
@@ -74,6 +118,9 @@ export const MyEventsScreen: React.FC = () => {
               event={item}
               onPress={() => handleEventPress(item)}
               onFavorite={handleFavorite}
+              mode="owner"
+              onDelete={() => handleDeleteEvent(item)}
+              deleteLoading={deleteProcessingId === item.id}
             />
           )}
           contentContainerStyle={styles.listContent}

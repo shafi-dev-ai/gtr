@@ -31,6 +31,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       initializationService.clearAll();
       realtimeService.cleanup();
       
+      // Unregister device token for push notifications
+      try {
+        const { pushNotificationService } = await import('../services/pushNotifications');
+        await pushNotificationService.unregisterDeviceToken();
+        await pushNotificationService.clearAllNotifications();
+      } catch (error) {
+        console.error('Error unregistering push notifications:', error);
+      }
+      
       // Sign out
       const { error } = await authService.signOut();
       if (error) {
@@ -76,6 +85,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (isAuth && !isRecovery) {
         try {
           await initializationService.initializeCriticalData();
+          // Register device for push notifications
+          const { pushNotificationService } = await import('../services/pushNotifications');
+          await pushNotificationService.registerDeviceToken();
         } catch (error) {
           console.error('Error initializing data:', error);
           // Don't block login if initialization fails

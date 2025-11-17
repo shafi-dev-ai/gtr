@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { EventWithCreator } from '../../types/event.types';
@@ -13,20 +13,27 @@ interface EventCardProps {
   event: EventWithCreator & { attendeeAvatars?: string[] };
   onPress?: () => void;
   onFavorite?: () => void;
+  mode?: 'default' | 'owner';
+  onDelete?: () => void;
+  deleteLoading?: boolean;
 }
 
 export const EventCard: React.FC<EventCardProps> = ({
   event,
   onPress,
   onFavorite,
+  mode = 'default',
+  onDelete,
+  deleteLoading = false,
 }) => {
   const { isEventFavorited, toggleEventFavorite } = useFavorites();
+  const isOwnerMode = mode === 'owner';
   
   // Rate limiter: max 5 favorite actions per 10 seconds
   const favoriteRateLimiter = useRef(new RateLimiter(5, 10000));
 
-  // Get favorite status from context
-  const isFavorite = isEventFavorited(event.id);
+  // Get favorite status from context (hide favorite in owner mode)
+  const isFavorite = isOwnerMode ? false : isEventFavorited(event.id);
 
   const handleFavoritePress = async () => {
     // Rate limiting check
@@ -85,18 +92,37 @@ export const EventCard: React.FC<EventCardProps> = ({
           style={styles.eventImage}
           contentFit="cover"
         />
-        {/* Favorite Button */}
-        <TouchableOpacity
-          style={styles.favoriteButton}
-          onPress={handleFavoritePress}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name={isFavorite ? 'heart' : 'heart-outline'}
-            size={20}
-            color={isFavorite ? '#DC143C' : '#181920'}
-          />
-        </TouchableOpacity>
+        {/* Favorite Button or Delete Button */}
+        {isOwnerMode ? (
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={onDelete}
+            activeOpacity={0.8}
+            disabled={deleteLoading}
+          >
+            {deleteLoading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Ionicons
+                name="trash-outline"
+                size={20}
+                color="#FFFFFF"
+              />
+            )}
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.favoriteButton}
+            onPress={handleFavoritePress}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={isFavorite ? 'heart' : 'heart-outline'}
+              size={20}
+              color={isFavorite ? '#DC143C' : '#181920'}
+            />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Event Info */}
@@ -134,27 +160,26 @@ export const EventCard: React.FC<EventCardProps> = ({
           <View style={styles.avatarContainer}>
             {event.attendeeAvatars && event.attendeeAvatars.length > 0 ? (
               event.attendeeAvatars.map((avatarUrl, index) => {
-                const avatarStyle = [
-                  styles.avatar,
-                  index === 0 ? styles.avatar1 : index === 1 ? styles.avatar2 : styles.avatar3,
-                ];
+                const getAvatarStyle = () => {
+                  switch (index) {
+                    case 0: return styles.avatar1;
+                    case 1: return styles.avatar2;
+                    case 2: return styles.avatar3;
+                    case 3: return styles.avatar4;
+                    case 4: return styles.avatar5;
+                    default: return {};
+                  }
+                };
                 return (
                   <Image
                     key={index}
                     source={{ uri: avatarUrl }}
-                    style={avatarStyle}
+                    style={[styles.avatar, getAvatarStyle()]}
                     contentFit="cover"
                   />
                 );
               })
-            ) : (
-              // Placeholder avatars if no attendees
-              <>
-                <View style={[styles.avatar, styles.avatar1]} />
-                <View style={[styles.avatar, styles.avatar2]} />
-                <View style={[styles.avatar, styles.avatar3]} />
-              </>
-            )}
+            ) : null}
           </View>
           <Text style={styles.attendeesText}>
             {event.rsvp_count || 0}+ Going
@@ -191,6 +216,17 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 8,
     backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#DC143C',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -245,12 +281,18 @@ const styles = StyleSheet.create({
   },
   avatar1: {
     marginLeft: 0,
-    zIndex: 3,
+    zIndex: 5,
   },
   avatar2: {
-    zIndex: 2,
+    zIndex: 4,
   },
   avatar3: {
+    zIndex: 3,
+  },
+  avatar4: {
+    zIndex: 2,
+  },
+  avatar5: {
     zIndex: 1,
   },
   attendeesText: {

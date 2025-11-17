@@ -100,13 +100,13 @@ export const EventsSection: React.FC<EventsSectionProps> = ({
     return sorted.slice(0, 5);
   }, [visibleEvents, profile]);
 
-  // Map events with avatars
+  // Map events with avatars (max 5 avatars)
   const eventsWithAvatars = useMemo<EventWithAttendees[]>(() => {
     return sortedEvents.map(event => {
       const rsvps = rsvpsByEvent?.[event.id] || [];
       const attendeeAvatars = rsvps
         .filter((rsvp: any) => rsvp.profiles?.avatar_url)
-        .slice(0, 3)
+        .slice(0, 5) // Maximum 5 avatars
         .map((rsvp: any) => rsvp.profiles!.avatar_url!);
       
       return {
@@ -127,6 +127,27 @@ export const EventsSection: React.FC<EventsSectionProps> = ({
       unsubscribe();
     };
   }, [refresh]);
+
+  // Subscribe to RSVP changes for visible events in real-time
+  useEffect(() => {
+    if (!sortedEvents || sortedEvents.length === 0) return;
+
+    const eventIds = sortedEvents.slice(0, 5).map(e => e.id);
+    const unsubscribes: (() => void)[] = [];
+
+    // Subscribe to RSVP changes for each event
+    eventIds.forEach(eventId => {
+      const unsubscribe = realtimeService.subscribeToEventRSVPs(eventId, () => {
+        // Refresh RSVPs when someone RSVPs/cancels
+        refresh();
+      });
+      unsubscribes.push(unsubscribe);
+    });
+
+    return () => {
+      unsubscribes.forEach(unsub => unsub());
+    };
+  }, [sortedEvents, refresh]);
 
   // Expose refresh function to parent
   useEffect(() => {
