@@ -6,6 +6,7 @@ import {
   Message,
   SendMessagePayload,
 } from '../types/messages.types';
+import { ListingWithImages } from '../types/listing.types';
 
 type RawConversation = {
   id: string;
@@ -17,6 +18,15 @@ type RawConversation = {
   last_message_preview: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+};
+
+export const LISTING_REFERENCE_PREFIX = '__listing_ref__:';
+
+type ListingReferencePayload = {
+  id: string;
+  title?: string | null;
+  price?: number | null;
+  location?: string | null;
 };
 
 type ProfileRecord = {
@@ -51,6 +61,24 @@ const buildProfilesMap = (profiles: ProfileRecord[]): Record<string, Conversatio
   return map;
 };
 
+const formatConversationPreview = (preview?: string | null): string | null => {
+  if (!preview) return preview ?? null;
+  if (!preview.startsWith(LISTING_REFERENCE_PREFIX)) {
+    return preview;
+  }
+
+  try {
+    const payload = JSON.parse(
+      preview.slice(LISTING_REFERENCE_PREFIX.length)
+    ) as ListingReferencePayload;
+    const listingName = payload.title || 'GT-R Listing';
+    return `Listing reference • ${listingName}`;
+  } catch (error) {
+    console.warn('Failed to parse listing preview payload:', error);
+    return 'Listing reference shared';
+  }
+};
+
 const mapConversationRecord = (
   record: RawConversation,
   currentUserId: string,
@@ -75,8 +103,11 @@ const mapConversationRecord = (
       ? record.user1_unread_count || 0
       : record.user2_unread_count || 0;
 
+  const lastMessagePreview = formatConversationPreview(record.last_message_preview);
+
   return {
     ...record,
+    last_message_preview: lastMessagePreview,
     partner: partnerInfo,
     unreadCount,
   };
@@ -307,6 +338,67 @@ export const messagesService = {
     }
 
     invalidateConversationCaches(conversationId);
+  },
+
+  /**
+   * Send a contextual message referencing a listing
+   */
+  async sendListingReferenceMessage(
+    conversationId: string,
+    recipientId: string,
+    listing: ListingWithImages
+  ): Promise<void> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    const parseListingReference = (content?: string | null): ListingReferencePayload | null => {
+      if (!content || !content.startsWith(LISTING_REFERENCE_PREFIX)) return null;
+      try {
+        return JSON.parse(content.slice(LISTING_REFERENCE_PREFIX.length)) as ListingReferencePayload;
+      } catch {
+        return null;
+      }
+    };
+
+    const { data: recentMessages, error } = await supabase
+      .from('messages')
+      .select('content')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (error) throw error;
+
+    if (
+      recentMessages?.some((message) => {
+        const payload = parseListingReference(message.content);
+        return payload?.id === listing.id;
+      })
+    ) {
+      return;
+    }
+
+    const payload = {
+      id: listing.id,
+      title:
+        listing.title ||
+        `${listing.year || ''} ${listing.model || 'GT-R'}`.trim(),
+      price: listing.price ?? null,
+      location:
+        listing.location ||
+        [listing.city, listing.state].filter(Boolean).join(', ') ||
+        null,
+    };
+
+    const content = `${LISTING_REFERENCE_PREFIX}${JSON.stringify(payload)}`;
+
+    await this.sendMessage({
+      conversationId,
+      recipientId,
+      content,
+    });
   },
 
   /**

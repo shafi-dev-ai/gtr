@@ -16,17 +16,27 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Conversation, ConversationParticipant, Message } from '../../types/messages.types';
+import { ListingWithImages } from '../../types/listing.types';
 import { useAuth } from '../../context/AuthContext';
 import { useDataFetch } from '../../hooks/useDataFetch';
 import { RequestPriority } from '../../services/dataManager';
 import { messagesService } from '../../services/messages';
 import { realtimeService } from '../../services/realtime';
 import { formatDateLabel, formatMessageTime, isSameDay } from '../../utils/dateHelpers';
+import { LISTING_REFERENCE_PREFIX } from '../../services/messages';
 
 interface ChatRouteParams {
   conversationId: string;
   partner: ConversationParticipant;
   conversation?: Conversation;
+  listingContext?: ListingWithImages;
+}
+
+interface ListingReferencePayload {
+  id: string;
+  title?: string | null;
+  price?: number | null;
+  location?: string | null;
 }
 
 export const ChatScreen: React.FC = () => {
@@ -51,6 +61,33 @@ export const ChatScreen: React.FC = () => {
   });
 
   const messageList = useMemo(() => messages || [], [messages]);
+
+  const formatListingReferenceInfo = useCallback((payload: ListingReferencePayload) => {
+    const formatter = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    });
+
+    return {
+      title: payload.title || 'GT-R Listing',
+      price:
+        typeof payload.price === 'number' ? formatter.format(payload.price) : null,
+      location: payload.location || null,
+    };
+  }, []);
+
+  const parseListingReference = (content?: string | null) => {
+    if (!content || !content.startsWith(LISTING_REFERENCE_PREFIX)) return null;
+    const payloadString = content.slice(LISTING_REFERENCE_PREFIX.length);
+    try {
+      return JSON.parse(payloadString) as ListingReferencePayload;
+    } catch (error) {
+      console.warn('Failed to parse listing reference content', error);
+      return null;
+    }
+  };
 
   if (!conversationId || !partner) {
     return (
@@ -164,18 +201,54 @@ export const ChatScreen: React.FC = () => {
     Alert.alert('Coming soon', 'Voice messages are coming soon.');
   };
 
-  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
-    const isOwnMessage = item.sender_id === user?.id;
+  const renderListingContextBubble = (
+    info: { title: string | null; price: string | null; location: string | null }
+  ) => {
+    if (!info) return null;
+    return (
+      <TouchableOpacity
+        style={styles.listingContextCard}
+        activeOpacity={0.7}
+        onPress={() =>
+          Alert.alert('Coming soon', 'Listing details will open here soon.')
+        }
+      >
+        <View style={styles.listingContextIndicator} />
+        <View style={styles.listingContextBody}>
+          <Text style={styles.listingContextLabel}>Listing reference</Text>
+          <Text style={styles.listingContextTitle} numberOfLines={1}>
+            {info.title}
+          </Text>
+          {info.price && (
+            <Text style={styles.listingContextPrice}>{info.price}</Text>
+          )}
+          {info.location && (
+            <Text style={styles.listingContextLocation}>{info.location}</Text>
+          )}
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="#8086A2" />
+      </TouchableOpacity>
+    );
+  };
+
+  const renderMessageBubble = (message: Message, index: number) => {
+    const listingPayload = parseListingReference(message.content);
+    if (listingPayload) {
+      const info = formatListingReferenceInfo(listingPayload);
+      return renderListingContextBubble(info);
+    }
+
+    const isOwnMessage = message.sender_id === user?.id;
     const previousMessage = messageList[index - 1];
     const showDatePill =
       !previousMessage ||
-      !isSameDay(new Date(previousMessage.created_at), new Date(item.created_at));
+      !isSameDay(new Date(previousMessage.created_at), new Date(message.created_at));
 
     return (
       <View>
         {showDatePill && (
           <View style={styles.datePill}>
-            <Text style={styles.datePillText}>{formatDateLabel(item.created_at)}</Text>
+            <Text style={styles.datePillText}>{formatDateLabel(message.created_at)}</Text>
           </View>
         )}
         <View
@@ -196,7 +269,7 @@ export const ChatScreen: React.FC = () => {
                 isOwnMessage && styles.messageTextOutgoing,
               ]}
             >
-              {item.content}
+              {message.content}
             </Text>
             <Text
               style={[
@@ -204,13 +277,16 @@ export const ChatScreen: React.FC = () => {
                 isOwnMessage && styles.messageTimeOutgoing,
               ]}
             >
-              {formatMessageTime(item.created_at)}
+              {formatMessageTime(message.created_at)}
             </Text>
           </View>
         </View>
       </View>
     );
   };
+
+  const renderItem = ({ item, index }: { item: Message; index: number }) =>
+    renderMessageBubble(item, index);
 
   const keyExtractor = (item: Message) => item.id;
 
@@ -266,7 +342,7 @@ export const ChatScreen: React.FC = () => {
             ref={flatListRef}
             data={messageList}
             keyExtractor={keyExtractor}
-            renderItem={renderMessage}
+            renderItem={renderItem}
             contentContainerStyle={styles.messagesList}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
@@ -377,6 +453,45 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     flexGrow: 1,
     justifyContent: 'flex-end',
+  },
+  listingContextCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#161721',
+    marginBottom: 12,
+  },
+  listingContextIndicator: {
+    width: 6,
+    height: 40,
+    borderRadius: 3,
+    backgroundColor: '#DC143C',
+    marginRight: 12,
+  },
+  listingContextBody: {
+    flex: 1,
+  },
+  listingContextLabel: {
+    fontSize: 12,
+    color: '#8086A2',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  listingContextTitle: {
+    fontSize: 15,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  listingContextPrice: {
+    fontSize: 13,
+    color: '#B0B5CC',
+    marginTop: 2,
+  },
+  listingContextLocation: {
+    fontSize: 12,
+    color: '#8086A2',
+    marginTop: 2,
   },
   datePill: {
     alignSelf: 'center',

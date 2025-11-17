@@ -77,6 +77,7 @@ export const LikedListingsScreen: React.FC = () => {
       partnerId: listing.user_id,
       navigation,
       fallbackName: listing.model || listing.title,
+      listing,
     });
   };
 

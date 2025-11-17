@@ -157,6 +157,36 @@ React Native app for GT-R marketplace with Supabase backend. Features: listings,
 
 ---
 
+## Day 4 - Messaging & Notifications
+
+### Completed
+
+- ✅ Full messaging experience:
+  - Inbox screen with chats/calls tabs, search, unread badges, realtime updates
+  - Chat detail screen with verified header, call buttons, keyboard-safe composer with send/mic actions
+  - Supabase messaging service (conversations, messages, unread counts, realtime) + listing reference support
+  - Inline listing reference cards shared between both participants
+- ✅ Dashboard enhancements:
+  - Live message unread counter in header
+  - “Chat now” buttons on Home, Marketplace, and Favorites now open chats with contextual listing info
+- ✅ Notification fixes:
+  - Proper badge updates, cache invalidation, badge count persistence across app states
+
+### Important Files
+
+- `src/services/messages.ts`, `src/types/messages.types.ts`
+- `src/screens/messages/InboxScreen.tsx`, `src/screens/messages/ChatScreen.tsx`
+- `src/utils/chatHelpers.ts`
+- `src/components/common/DashboardHeader.tsx`
+- `src/components/home/ListingsSection.tsx`, `src/components/shared/ListingCard*.tsx`
+
+### Notes
+
+- Listing references are stored as structured system messages (`__listing_ref__` prefix) so both users see the same card.
+- Inbox previews strip system payloads and show a friendly “Listing reference” summary.
+- Realtime subscriptions keep both notifications and messages in sync without manual refreshes.
+
+---
 ## Current State
 
 ### Working Features
