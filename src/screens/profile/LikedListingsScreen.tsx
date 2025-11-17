@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -19,6 +20,7 @@ import { useDataFetch } from '../../hooks/useDataFetch';
 import { RequestPriority } from '../../services/dataManager';
 import { ListingWithImages } from '../../types/listing.types';
 import dataManager from '../../services/dataManager';
+import { openChatWithUser } from '../../utils/chatHelpers';
 
 export const LikedListingsScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -62,9 +64,20 @@ export const LikedListingsScreen: React.FC = () => {
     console.log('Listing pressed:', listing.id);
   };
 
-  const handleChatPress = (listing: FavoriteListing) => {
-    // TODO: Navigate to chat
-    console.log('Chat pressed for listing:', listing.id);
+  const handleChatPress = async (listing: FavoriteListing) => {
+    if (!user?.id) {
+      Alert.alert('Sign in required', 'Please sign in to chat with sellers.');
+      return;
+    }
+    if (listing.user_id === user.id) {
+      Alert.alert('Unavailable', 'You cannot chat with your own listing.');
+      return;
+    }
+    await openChatWithUser({
+      partnerId: listing.user_id,
+      navigation,
+      fallbackName: listing.model || listing.title,
+    });
   };
 
   const handleFavorite = () => {
@@ -203,4 +216,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-

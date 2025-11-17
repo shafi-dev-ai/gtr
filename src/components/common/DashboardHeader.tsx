@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, AppState } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { profilesService } from '../../services/profiles';
 import { Profile } from '../../types/profile.types';
 import { useDataFetch } from '../../hooks/useDataFetch';
 import { RequestPriority } from '../../services/dataManager';
 import { notificationsService } from '../../services/notifications';
+import { messagesService } from '../../services/messages';
 import { realtimeService } from '../../services/realtime';
 
 interface DashboardHeaderProps {
@@ -21,7 +23,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
 }) => {
   const { user } = useAuth();
   const [notificationCount, setNotificationCount] = useState(0);
-  const [messageCount, setMessageCount] = useState(0); // TODO: Get from actual messages
+  const [messageCount, setMessageCount] = useState(0);
 
   // Fetch unread notification count
   const { data: unreadCount, refresh: refreshNotificationCount } = useDataFetch<number>({
@@ -29,7 +31,25 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
     fetchFn: () => notificationsService.getUnreadCount(),
     priority: RequestPriority.MEDIUM,
     enabled: !!user,
+    ttl: 60 * 1000, // refresh badge at least once per minute
   });
+
+  const { data: unreadMessagesCount, refresh: refreshMessageCount } = useDataFetch<number>({
+    cacheKey: 'messages:unread_count',
+    fetchFn: () => messagesService.getUnreadCount(),
+    priority: RequestPriority.MEDIUM,
+    enabled: !!user,
+    ttl: 60 * 1000,
+  });
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user) {
+        refreshNotificationCount();
+        refreshMessageCount();
+      }
+    }, [user, refreshNotificationCount, refreshMessageCount])
+  );
 
   // Subscribe to real-time notification updates
   useEffect(() => {
@@ -52,9 +72,43 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
     };
   }, [user, refreshNotificationCount]);
 
+  useEffect(() => {
+    if (!user) return;
+
+    let unsubscribe: (() => void) | null = null;
+
+    const setupSubscription = async () => {
+      unsubscribe = await realtimeService.subscribeToConversations(() => {
+        refreshMessageCount();
+      });
+    };
+
+    setupSubscription();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [user, refreshMessageCount]);
+
+  // Refresh badge when app returns to foreground
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && user) {
+        refreshNotificationCount();
+        refreshMessageCount();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [user, refreshNotificationCount, refreshMessageCount]);
+
   // Update notification count when data changes
   useEffect(() => {
-    if (unreadCount !== undefined) {
+    if (typeof unreadCount === 'number') {
       setNotificationCount(unreadCount);
       // Update badge count on app icon (only if push notifications are available)
       const updateBadge = async () => {
@@ -71,6 +125,12 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
       updateBadge();
     }
   }, [unreadCount]);
+
+  useEffect(() => {
+    if (typeof unreadMessagesCount === 'number') {
+      setMessageCount(unreadMessagesCount);
+    }
+  }, [unreadMessagesCount]);
 
   // Fetch profile using DataManager cache
   const { data: profile } = useDataFetch<Profile | null>({

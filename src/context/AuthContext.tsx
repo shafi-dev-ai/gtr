@@ -101,7 +101,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return () => {
-      subscription.unsubscribe();
+      try {
+        subscription?.unsubscribe?.();
+      } catch (error) {
+        console.warn('Error unsubscribing from auth changes:', error);
+      }
     };
   }, []);
 
@@ -119,4 +123,3 @@ export const useAuth = () => {
   }
   return context;
 };
-

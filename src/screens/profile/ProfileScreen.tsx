@@ -149,7 +149,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
       
       // If no cache exists, fetch immediately
       if (cached === null) {
-        console.log('📊 No stats cache found, fetching stats for user:', user.id);
+        if (__DEV__) {
+          console.log('📊 No stats cache found, fetching stats for user:', user.id);
+        }
         // Mark that we're fetching for this user
         hasFetchedStatsRef.current = user.id;
         // Invalidate cache to ensure fresh fetch
@@ -159,7 +161,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
       } else {
         // Cache exists, mark as fetched
         hasFetchedStatsRef.current = user.id;
-        console.log('📊 Stats cache found, using cached data');
+        if (__DEV__) {
+          console.log('📊 Stats cache found, using cached data');
+        }
       }
     };
     
@@ -817,4 +821,3 @@ const styles = StyleSheet.create({
     height: 32,
   },
 });
-

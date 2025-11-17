@@ -40,6 +40,7 @@ export function useDataFetch<T>(options: UseDataFetchOptions<T>): UseDataFetchRe
   const onSuccessRef = useRef(onSuccess);
   const onErrorRef = useRef(onError);
   const previousEnabledRef = useRef(enabled);
+  const fetchIdRef = useRef(0);
 
   // Keep refs updated
   useEffect(() => {
@@ -51,11 +52,15 @@ export function useDataFetch<T>(options: UseDataFetchOptions<T>): UseDataFetchRe
   const fetchData = useCallback(async (forceRefresh = false) => {
     if (!enabled) return;
 
+    const currentFetchId = ++fetchIdRef.current;
+
     if (!forceRefresh && !skipCache) {
       const cached = await dataManager.getCache<T>(cacheKey);
       if (cached !== null) {
-        setData(cached);
-        setLoading(false);
+        if (fetchIdRef.current === currentFetchId) {
+          setData(cached);
+          setLoading(false);
+        }
         return;
       }
     }
@@ -71,13 +76,13 @@ export function useDataFetch<T>(options: UseDataFetchOptions<T>): UseDataFetchRe
         skipCache: forceRefresh || skipCache,
       });
 
-      if (!cancelledRef.current) {
+      if (!cancelledRef.current && fetchIdRef.current === currentFetchId) {
         setData(result);
         setLoading(false);
         onSuccessRef.current?.(result);
       }
     } catch (err: any) {
-      if (!cancelledRef.current) {
+      if (!cancelledRef.current && fetchIdRef.current === currentFetchId) {
         setError(err);
         setLoading(false);
         onErrorRef.current?.(err);
@@ -99,6 +104,8 @@ export function useDataFetch<T>(options: UseDataFetchOptions<T>): UseDataFetchRe
     previousEnabledRef.current = enabled;
 
     if (!enabled) {
+      cancelledRef.current = true;
+      fetchIdRef.current++;
       setLoading(false);
       setData(null);
       return;
@@ -108,12 +115,15 @@ export function useDataFetch<T>(options: UseDataFetchOptions<T>): UseDataFetchRe
 
     // Check cache and load data (async)
     const initializeData = async () => {
+      const initFetchId = ++fetchIdRef.current;
       // Check cache first
       if (!skipCache) {
         const cached = await dataManager.getCache<T>(cacheKey);
         if (cached !== null && !wasDisabled) {
-          setData(cached);
-          setLoading(false);
+          if (fetchIdRef.current === initFetchId) {
+            setData(cached);
+            setLoading(false);
+          }
           return;
         }
       }
@@ -129,13 +139,13 @@ export function useDataFetch<T>(options: UseDataFetchOptions<T>): UseDataFetchRe
           skipCache: false,
         });
 
-        if (!cancelledRef.current) {
+        if (!cancelledRef.current && fetchIdRef.current === initFetchId) {
           setData(result);
           setLoading(false);
           onSuccessRef.current?.(result);
         }
       } catch (err: any) {
-        if (!cancelledRef.current) {
+        if (!cancelledRef.current && fetchIdRef.current === initFetchId) {
           setError(err);
           setLoading(false);
           onErrorRef.current?.(err);
@@ -147,9 +157,9 @@ export function useDataFetch<T>(options: UseDataFetchOptions<T>): UseDataFetchRe
 
     return () => {
       cancelledRef.current = true;
+      fetchIdRef.current++;
     };
   }, [cacheKey, enabled, skipCache, priority, ttl]); // Only stable dependencies
 
   return { data, loading, error, refetch, refresh };
 }
-

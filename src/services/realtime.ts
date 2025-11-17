@@ -7,6 +7,23 @@ type UnsubscribeFn = () => void;
 class RealtimeService {
   private subscriptions: Map<string, any> = new Map();
 
+  private removeChannel(channelKey: string): void {
+    const existing = this.subscriptions.get(channelKey);
+    if (existing) {
+      try {
+        existing.unsubscribe?.();
+      } catch (error) {
+        console.warn(`Error unsubscribing channel ${channelKey}:`, error);
+      }
+      supabase.removeChannel(existing).catch(() => {});
+      this.subscriptions.delete(channelKey);
+    }
+  }
+
+  private createUniqueChannelKey(baseKey: string): string {
+    return `${baseKey}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
   /**
    * Subscribe to listing favorites changes for a specific listing
    */
@@ -20,9 +37,7 @@ class RealtimeService {
     const channelKey = `listing_favorite_${listingId}_${user.id}`;
     
     // Remove existing subscription if any
-    if (this.subscriptions.has(channelKey)) {
-      this.subscriptions.get(channelKey).unsubscribe();
-    }
+    this.removeChannel(channelKey);
 
     const channel = supabase
       .channel(channelKey)
@@ -56,8 +71,7 @@ class RealtimeService {
     this.subscriptions.set(channelKey, channel);
 
     return () => {
-      supabase.removeChannel(channel);
-      this.subscriptions.delete(channelKey);
+      this.removeChannel(channelKey);
     };
   }
 
@@ -72,10 +86,7 @@ class RealtimeService {
 
     const channelKey = `user_favorites_${user.id}`;
     
-    if (this.subscriptions.has(channelKey)) {
-      this.subscriptions.get(channelKey).unsubscribe();
-      this.subscriptions.delete(channelKey);
-    }
+    this.removeChannel(channelKey);
 
     const channel = supabase
       .channel(channelKey)
@@ -102,8 +113,7 @@ class RealtimeService {
     this.subscriptions.set(channelKey, channel);
 
     return () => {
-      supabase.removeChannel(channel);
-      this.subscriptions.delete(channelKey);
+      this.removeChannel(channelKey);
     };
   }
 
@@ -119,9 +129,7 @@ class RealtimeService {
 
     const channelKey = `event_favorite_${eventId}_${user.id}`;
     
-    if (this.subscriptions.has(channelKey)) {
-      this.subscriptions.get(channelKey).unsubscribe();
-    }
+    this.removeChannel(channelKey);
 
     const channel = supabase
       .channel(channelKey)
@@ -150,8 +158,7 @@ class RealtimeService {
     this.subscriptions.set(channelKey, channel);
 
     return () => {
-      supabase.removeChannel(channel);
-      this.subscriptions.delete(channelKey);
+      this.removeChannel(channelKey);
     };
   }
 
@@ -166,10 +173,7 @@ class RealtimeService {
 
     const channelKey = `user_event_favorites_${user.id}`;
     
-    if (this.subscriptions.has(channelKey)) {
-      this.subscriptions.get(channelKey).unsubscribe();
-      this.subscriptions.delete(channelKey);
-    }
+    this.removeChannel(channelKey);
 
     const channel = supabase
       .channel(channelKey)
@@ -196,8 +200,7 @@ class RealtimeService {
     this.subscriptions.set(channelKey, channel);
 
     return () => {
-      supabase.removeChannel(channel);
-      this.subscriptions.delete(channelKey);
+      this.removeChannel(channelKey);
     };
   }
 
@@ -213,9 +216,7 @@ class RealtimeService {
 
     const channelKey = `post_like_${postId}_${user.id}`;
     
-    if (this.subscriptions.has(channelKey)) {
-      this.subscriptions.get(channelKey).unsubscribe();
-    }
+    this.removeChannel(channelKey);
 
     const channel = supabase
       .channel(channelKey)
@@ -247,8 +248,7 @@ class RealtimeService {
     this.subscriptions.set(channelKey, channel);
 
     return () => {
-      supabase.removeChannel(channel);
-      this.subscriptions.delete(channelKey);
+      this.removeChannel(channelKey);
     };
   }
 
@@ -260,9 +260,7 @@ class RealtimeService {
   ): UnsubscribeFn {
     const channelKey = 'new_listings';
     
-    if (this.subscriptions.has(channelKey)) {
-      this.subscriptions.get(channelKey).unsubscribe();
-    }
+    this.removeChannel(channelKey);
 
     const channel = supabase
       .channel(channelKey)
@@ -286,8 +284,7 @@ class RealtimeService {
     this.subscriptions.set(channelKey, channel);
 
     return () => {
-      supabase.removeChannel(channel);
-      this.subscriptions.delete(channelKey);
+      this.removeChannel(channelKey);
     };
   }
 
@@ -299,9 +296,7 @@ class RealtimeService {
   ): UnsubscribeFn {
     const channelKey = 'new_forum_posts';
     
-    if (this.subscriptions.has(channelKey)) {
-      this.subscriptions.get(channelKey).unsubscribe();
-    }
+    this.removeChannel(channelKey);
 
     const channel = supabase
       .channel(channelKey)
@@ -323,8 +318,7 @@ class RealtimeService {
     this.subscriptions.set(channelKey, channel);
 
     return () => {
-      supabase.removeChannel(channel);
-      this.subscriptions.delete(channelKey);
+      this.removeChannel(channelKey);
     };
   }
 
@@ -337,9 +331,7 @@ class RealtimeService {
   ): UnsubscribeFn {
     const channelKey = `forum_comments_${postId}`;
     
-    if (this.subscriptions.has(channelKey)) {
-      this.subscriptions.get(channelKey).unsubscribe();
-    }
+    this.removeChannel(channelKey);
 
     const channel = supabase
       .channel(channelKey)
@@ -362,8 +354,7 @@ class RealtimeService {
     this.subscriptions.set(channelKey, channel);
 
     return () => {
-      supabase.removeChannel(channel);
-      this.subscriptions.delete(channelKey);
+      this.removeChannel(channelKey);
     };
   }
 
@@ -375,9 +366,7 @@ class RealtimeService {
   ): UnsubscribeFn {
     const channelKey = 'new_events';
     
-    if (this.subscriptions.has(channelKey)) {
-      this.subscriptions.get(channelKey).unsubscribe();
-    }
+    this.removeChannel(channelKey);
 
     const channel = supabase
       .channel(channelKey)
@@ -399,8 +388,7 @@ class RealtimeService {
     this.subscriptions.set(channelKey, channel);
 
     return () => {
-      supabase.removeChannel(channel);
-      this.subscriptions.delete(channelKey);
+      this.removeChannel(channelKey);
     };
   }
 
@@ -413,9 +401,7 @@ class RealtimeService {
   ): UnsubscribeFn {
     const channelKey = `event_rsvps_${eventId}`;
     
-    if (this.subscriptions.has(channelKey)) {
-      this.subscriptions.get(channelKey).unsubscribe();
-    }
+    this.removeChannel(channelKey);
 
     const channel = supabase
       .channel(channelKey)
@@ -454,8 +440,7 @@ class RealtimeService {
     this.subscriptions.set(channelKey, channel);
 
     return () => {
-      supabase.removeChannel(channel);
-      this.subscriptions.delete(channelKey);
+      this.removeChannel(channelKey);
     };
   }
 
@@ -468,9 +453,7 @@ class RealtimeService {
   ): UnsubscribeFn {
     const channelKey = `listing_update_${listingId}`;
     
-    if (this.subscriptions.has(channelKey)) {
-      this.subscriptions.get(channelKey).unsubscribe();
-    }
+    this.removeChannel(channelKey);
 
     const channel = supabase
       .channel(channelKey)
@@ -495,8 +478,7 @@ class RealtimeService {
     this.subscriptions.set(channelKey, channel);
 
     return () => {
-      supabase.removeChannel(channel);
-      this.subscriptions.delete(channelKey);
+      this.removeChannel(channelKey);
     };
   }
 
@@ -509,10 +491,7 @@ class RealtimeService {
   ): Promise<UnsubscribeFn> {
     const channelKey = `user_data_changes_${userId}`;
     
-    if (this.subscriptions.has(channelKey)) {
-      this.subscriptions.get(channelKey).unsubscribe();
-      this.subscriptions.delete(channelKey);
-    }
+    this.removeChannel(channelKey);
 
     const channel = supabase
       .channel(channelKey)
@@ -573,8 +552,116 @@ class RealtimeService {
     this.subscriptions.set(channelKey, channel);
 
     return () => {
-      supabase.removeChannel(channel);
-      this.subscriptions.delete(channelKey);
+      this.removeChannel(channelKey);
+    };
+  }
+
+  /**
+   * Subscribe to conversation changes (inbox/unread count)
+   */
+  async subscribeToConversations(callback: () => void): Promise<UnsubscribeFn> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return () => {};
+
+    const channelKey = this.createUniqueChannelKey(`conversations_${user.id}`);
+
+    const handleChange = () => {
+      try {
+        callback();
+      } catch (error) {
+        console.warn('Conversation callback error:', error);
+      }
+      dataManager.invalidateCache(/^messages:conversations/);
+      dataManager.invalidateCache('messages:unread_count');
+    };
+
+    const channel = supabase
+      .channel(channelKey)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversations',
+          filter: `user1_id=eq.${user.id}`,
+        },
+        handleChange
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversations',
+          filter: `user2_id=eq.${user.id}`,
+        },
+        handleChange
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'messages',
+          filter: `recipient_id=eq.${user.id}`,
+        },
+        handleChange
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn(`Conversation channel ${channelKey} status:`, status);
+        }
+      });
+
+    this.subscriptions.set(channelKey, channel);
+
+    return () => {
+      this.removeChannel(channelKey);
+    };
+  }
+
+  /**
+   * Subscribe to messages within a conversation
+   */
+  async subscribeToConversationMessages(
+    conversationId: string,
+    callback: () => void
+  ): Promise<UnsubscribeFn> {
+    const channelKey = this.createUniqueChannelKey(
+      `conversation_messages_${conversationId}`
+    );
+
+    const channel = supabase
+      .channel(channelKey)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        () => {
+          try {
+            callback();
+          } catch (error) {
+            console.warn('Conversation message callback error:', error);
+          }
+          dataManager.invalidateCache(new RegExp(`^messages:conversation:${conversationId}`));
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn(`Conversation messages channel ${channelKey} status:`, status);
+        }
+      });
+
+    this.subscriptions.set(channelKey, channel);
+
+    return () => {
+      this.removeChannel(channelKey);
     };
   }
 
@@ -587,8 +674,7 @@ class RealtimeService {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return () => {};
 
-    const baseChannelKey = `notifications_${user.id}`;
-    const uniqueChannelKey = `${baseChannelKey}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const uniqueChannelKey = this.createUniqueChannelKey(`notifications_${user.id}`);
 
     const channel = supabase
       .channel(uniqueChannelKey)
@@ -606,13 +692,16 @@ class RealtimeService {
           dataManager.invalidateCache(/^notifications/);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn(`Notification channel ${uniqueChannelKey} status:`, status);
+        }
+      });
 
     this.subscriptions.set(uniqueChannelKey, channel);
 
     return () => {
-      supabase.removeChannel(channel);
-      this.subscriptions.delete(uniqueChannelKey);
+      this.removeChannel(uniqueChannelKey);
     };
   }
 
@@ -620,10 +709,9 @@ class RealtimeService {
    * Cleanup all subscriptions
    */
   cleanup(): void {
-    this.subscriptions.forEach((channel) => {
-      supabase.removeChannel(channel);
+    Array.from(this.subscriptions.keys()).forEach((key) => {
+      this.removeChannel(key);
     });
-    this.subscriptions.clear();
   }
 }
 

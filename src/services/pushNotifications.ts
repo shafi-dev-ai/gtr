@@ -6,13 +6,45 @@ import { supabase } from './supabase';
 let Notifications: any = null;
 let isNotificationsAvailable = false;
 const isExpoGo = Constants.executionEnvironment === 'storeClient';
+const expoProjectId =
+  Constants?.expoConfig?.extra?.eas?.projectId ||
+  Constants?.expoConfig?.projectId ||
+  Constants?.easConfig?.projectId ||
+  null;
+const isAndroidWithoutExpoProject = Platform.OS === 'android' && !expoProjectId;
+let hasLoggedMissingFcmWarning = false;
+
+const isMissingFcmSetupError = (error: any) => {
+  if (!error) return false;
+  const message = typeof error === 'string' ? error : error?.message;
+  if (!message || typeof message !== 'string') {
+    return false;
+  }
+  return (
+    message.includes('Default FirebaseApp is not initialized') ||
+    message.includes('FCM') ||
+    message.includes('FirebaseApp')
+  );
+};
+
+const logMissingFcmWarningOnce = () => {
+  if (hasLoggedMissingFcmWarning) return;
+  hasLoggedMissingFcmWarning = true;
+  console.warn(
+    'Push notifications: missing Expo project ID/FCM credentials; skipping device token registration on Android.'
+  );
+};
+
+let permissionPromise: Promise<boolean> | null = null;
+let cachedPermissionGranted = false;
+let tokenPromise: Promise<string | null> | null = null;
+let cachedToken: string | null = null;
 
 try {
   // Dynamic import to avoid crash if module not available
   Notifications = require('expo-notifications');
   
-  if (!isExpoGo && Notifications) {
-    // Configure notification handler
+  if (!isExpoGo && Notifications?.setNotificationHandler) {
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowAlert: true,
@@ -45,27 +77,42 @@ export const pushNotificationService = {
       return false;
     }
 
-    try {
-      if (!Notifications) return false;
-      
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-
-      if (finalStatus !== 'granted') {
-        console.warn('Failed to get push notification permissions!');
-        return false;
-      }
-
+    if (cachedPermissionGranted) {
       return true;
-    } catch (error) {
-      console.warn('Error requesting notification permissions:', error);
-      return false;
     }
+
+    if (permissionPromise) {
+      return permissionPromise;
+    }
+
+    permissionPromise = (async () => {
+      try {
+        if (!Notifications) return false;
+        
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+
+        if (existingStatus !== 'granted') {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
+        }
+
+        cachedPermissionGranted = finalStatus === 'granted';
+
+        if (!cachedPermissionGranted) {
+          console.warn('Failed to get push notification permissions!');
+        }
+
+        return cachedPermissionGranted;
+      } catch (error) {
+        console.warn('Error requesting notification permissions:', error);
+        return false;
+      } finally {
+        permissionPromise = null;
+      }
+    })();
+
+    return permissionPromise;
   },
 
   /**
@@ -76,29 +123,48 @@ export const pushNotificationService = {
       return null;
     }
 
-    try {
-      if (!Notifications) return null;
-      
-      const hasPermission = await this.requestPermissions();
-      if (!hasPermission) return null;
-
-      let token: string | null = null;
-
-      if (Platform.OS === 'android') {
-        // Android: Get FCM token via Expo
-        const tokenData = await Notifications.getDevicePushTokenAsync();
-        token = tokenData.data as string;
-      } else if (Platform.OS === 'ios') {
-        // iOS: Get APNs token
-        const tokenData = await Notifications.getDevicePushTokenAsync();
-        token = tokenData.data as string;
-      }
-
-      return token;
-    } catch (error) {
-      console.warn('Error getting device token (push notifications may not be available):', error);
+    if (isAndroidWithoutExpoProject) {
+      logMissingFcmWarningOnce();
       return null;
     }
+
+    if (cachedToken) {
+      return cachedToken;
+    }
+
+    if (tokenPromise) {
+      return tokenPromise;
+    }
+
+    tokenPromise = (async () => {
+      try {
+        if (!Notifications) return null;
+        
+        const hasPermission = await this.requestPermissions();
+        if (!hasPermission) return null;
+
+        if (expoProjectId && Notifications.getExpoPushTokenAsync) {
+          const expoToken = await Notifications.getExpoPushTokenAsync({ projectId: expoProjectId });
+          cachedToken = expoToken?.data ?? null;
+        } else {
+          const tokenData = await Notifications.getDevicePushTokenAsync();
+          cachedToken = (tokenData?.data as string) || null;
+        }
+
+        return cachedToken;
+      } catch (error) {
+        if (isMissingFcmSetupError(error)) {
+          logMissingFcmWarningOnce();
+        } else {
+          console.warn('Error getting device token (push notifications may not be available):', error);
+        }
+        return null;
+      } finally {
+        tokenPromise = null;
+      }
+    })();
+
+    return tokenPromise;
   },
 
   /**
@@ -116,7 +182,9 @@ export const pushNotificationService = {
 
       const token = await this.getDeviceToken();
       if (!token) {
-        console.warn('No device token available');
+        if (__DEV__) {
+          console.info('Push notifications: no device token available (likely missing permissions or credentials).');
+        }
         return;
       }
 
@@ -169,6 +237,7 @@ export const pushNotificationService = {
       if (error) {
         console.error('Error unregistering device token:', error);
       }
+      cachedToken = null;
     } catch (error) {
       console.warn('Error unregistering device token:', error);
       // Don't throw - allow logout to continue
@@ -242,9 +311,11 @@ export const pushNotificationService = {
       return;
     }
 
+    const safeCount = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+
     try {
-      if (!Notifications) return;
-      await Notifications.setBadgeCountAsync(count);
+      if (!Notifications?.setBadgeCountAsync) return;
+      await Notifications.setBadgeCountAsync(safeCount);
     } catch (error) {
       console.warn('Error setting badge count:', error);
     }
@@ -261,7 +332,7 @@ export const pushNotificationService = {
     try {
       if (!Notifications) return;
       await Notifications.dismissAllNotificationsAsync();
-      await Notifications.setBadgeCountAsync(0);
+      await this.setBadgeCount(0);
     } catch (error) {
       console.warn('Error clearing notifications:', error);
     }

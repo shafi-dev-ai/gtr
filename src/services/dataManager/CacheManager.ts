@@ -5,6 +5,16 @@ class CacheManager {
   private cache: Map<string, CacheEntry> = new Map();
   private config: DataManagerConfig;
   private persistentCacheEnabled: boolean = true;
+  private readonly persistedKeyPatterns = [
+    /^profile:current$/,
+    /^profile:stats:/,
+    /^home:listings/,
+    /^home:events/,
+    /^home:forum/,
+    /^notifications:unread_count$/,
+    /^messages:unread_count$/,
+    /^messages:conversations/,
+  ];
 
   constructor(config: DataManagerConfig) {
     this.config = config;
@@ -27,6 +37,8 @@ class CacheManager {
         'home:listings:nearby:5',
         'home:events:upcoming:5',
         'home:forum:recent:3',
+        'messages:conversations',
+        'messages:unread_count',
       ];
 
       for (const key of criticalKeys) {
@@ -124,12 +136,7 @@ class CacheManager {
    * Check if key is critical and should be persisted
    */
   private isCriticalKey(key: string): boolean {
-    return (
-      key.startsWith('profile:') ||
-      key.startsWith('home:') ||
-      key.startsWith('user:listings:') ||
-      key.startsWith('user:events:')
-    );
+    return this.persistedKeyPatterns.some(pattern => pattern.test(key));
   }
 
   /**
@@ -239,4 +246,3 @@ class CacheManager {
 }
 
 export default CacheManager;
-

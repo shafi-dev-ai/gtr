@@ -15,7 +15,7 @@ const CARD_WIDTH = SCREEN_WIDTH - 48; // Screen width minus padding
 
 interface ListingsSectionProps {
   onListingPress?: (listingId: string) => void;
-  onChatPress?: (listingId: string) => void;
+  onChatPress?: (listing: ListingWithImages) => void;
   onFavorite?: (listingId: string) => void;
   onSearchPress?: () => void;
   onSearchSubmit?: (searchQuery: string) => void;
@@ -206,7 +206,7 @@ export const ListingsSection: React.FC<ListingsSectionProps> = ({
             key={listing.id}
             listing={listing}
             onPress={() => onListingPress?.(listing.id)}
-            onChatPress={() => onChatPress?.(listing.id)}
+            onChatPress={() => onChatPress?.(listing)}
             onFavorite={() => onFavorite?.(listing.id)}
           />
         ))}
@@ -272,4 +272,3 @@ const styles = StyleSheet.create({
     color: '#808080',
   },
 });
-

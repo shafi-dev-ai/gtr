@@ -9,7 +9,7 @@ import { RateLimiter } from '../../utils/throttle';
 interface ListingCardVerticalProps {
   listing: ListingWithImages;
   onPress?: () => void;
-  onChatPress?: () => void;
+  onChatPress?: (listing: ListingWithImages) => void;
   onFavorite?: () => void;
   mode?: 'default' | 'owner';
   onToggleStatus?: () => void;
@@ -222,7 +222,7 @@ export const ListingCardVertical: React.FC<ListingCardVerticalProps> = ({
         ) : (
           <TouchableOpacity
             style={styles.chatButton}
-            onPress={onChatPress}
+            onPress={() => onChatPress?.(listing)}
             activeOpacity={0.8}
           >
             <Ionicons name="chatbubble-outline" size={18} color="#181920" />
@@ -415,4 +415,3 @@ const styles = StyleSheet.create({
     color: '#DC143C',
   },
 });
-

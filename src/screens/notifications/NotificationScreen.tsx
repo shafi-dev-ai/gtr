@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Notification, NotificationGroup } from '../../types/notification.types';
 import { notificationsService } from '../../services/notifications';
@@ -29,7 +29,15 @@ export const NotificationScreen: React.FC = () => {
     cacheKey: 'notifications:all',
     fetchFn: () => notificationsService.getNotifications(200),
     priority: RequestPriority.HIGH,
+    ttl: 60 * 1000, // refresh list at least once per minute
   });
+
+  // Keep notifications fresh whenever screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh])
+  );
 
   // Subscribe to real-time notification updates
   useEffect(() => {

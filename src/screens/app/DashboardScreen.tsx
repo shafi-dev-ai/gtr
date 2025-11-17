@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { BottomNavigation, TabType } from '../../components/common/BottomNavigation';
@@ -9,13 +9,15 @@ import { EventsSection } from '../../components/home/EventsSection';
 import { ForumSection } from '../../components/home/ForumSection';
 import { MarketplaceScreen } from '../marketplace/MarketplaceScreen';
 import { ProfileScreen } from '../profile/ProfileScreen';
+import { ListingWithImages } from '../../types/listing.types';
+import { openChatWithUser } from '../../utils/chatHelpers';
 
 interface DashboardScreenProps {
   navigation?: any;
 }
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [marketplaceSearchQuery, setMarketplaceSearchQuery] = useState<string>('');
   const [refreshing, setRefreshing] = useState(false);
@@ -42,8 +44,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
   };
 
   const handleMessagePress = () => {
-    // TODO: Navigate to messages screen
-    console.log('Messages pressed');
+    if (navigation) {
+      navigation.navigate('Inbox' as never);
+    } else {
+      console.log('Messages pressed - navigation not available');
+    }
   };
 
   const handleListingPress = (listingId: string) => {
@@ -51,9 +56,21 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
     console.log('Listing pressed:', listingId);
   };
 
-  const handleChatPress = (listingId: string) => {
-    // TODO: Navigate to chat/messages with seller
-    console.log('Chat pressed for listing:', listingId);
+  const handleChatPress = async (listing: ListingWithImages) => {
+    if (!navigation) return;
+    if (!user?.id) {
+      Alert.alert('Sign in required', 'Please sign in to chat with sellers.');
+      return;
+    }
+    if (listing.user_id === user.id) {
+      Alert.alert('Unavailable', 'You cannot chat with your own listing.');
+      return;
+    }
+    await openChatWithUser({
+      partnerId: listing.user_id,
+      navigation,
+      fallbackName: listing.model || listing.title,
+    });
   };
 
   const handleFavorite = (listingId: string) => {
@@ -248,4 +265,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-

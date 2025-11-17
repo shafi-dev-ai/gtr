@@ -24,6 +24,8 @@ import { LikedEventsScreen } from './src/screens/profile/LikedEventsScreen';
 import { NotificationScreen } from './src/screens/notifications/NotificationScreen';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { conditionalStorage } from './src/services/sessionStorage';
+import { InboxScreen } from './src/screens/messages/InboxScreen';
+import { ChatScreen } from './src/screens/messages/ChatScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -60,6 +62,8 @@ const AppStack = () => {
       <Stack.Screen name="LikedListings" component={LikedListingsScreen} />
       <Stack.Screen name="LikedEvents" component={LikedEventsScreen} />
       <Stack.Screen name="Notification" component={NotificationScreen} />
+      <Stack.Screen name="Inbox" component={InboxScreen} />
+      <Stack.Screen name="Chat" component={ChatScreen} />
     </Stack.Navigator>
   );
 };
