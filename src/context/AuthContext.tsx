@@ -3,6 +3,7 @@ import { Session } from '@supabase/supabase-js';
 import { authService } from '../services/auth';
 import { initializationService } from '../services/initialization';
 import { realtimeService } from '../services/realtime';
+import { isRecoveryMode } from '../services/supabase';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -51,7 +52,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Get initial session
     authService.getSession().then((session) => {
       setSession(session);
-      setIsAuthenticated(!!session && !!session.user?.email_confirmed_at);
+      // Don't treat recovery sessions as authenticated - user needs to reset password first
+      const isRecovery = isRecoveryMode();
+      const isAuth = !!session && !!session.user?.email_confirmed_at && !isRecovery;
+      setIsAuthenticated(isAuth);
       setUser(session?.user ?? null);
       setIsLoading(false);
     });
@@ -61,13 +65,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       data: { subscription },
     } = authService.onAuthStateChange(async (session) => {
       setSession(session);
-      const isAuth = !!session && !!session.user?.email_confirmed_at;
+      // Don't treat recovery sessions as authenticated - user needs to reset password first
+      const isRecovery = isRecoveryMode();
+      const isAuth = !!session && !!session.user?.email_confirmed_at && !isRecovery;
       setIsAuthenticated(isAuth);
       setUser(session?.user ?? null);
       setIsLoading(false);
 
-      // Initialize critical data on login
-      if (isAuth) {
+      // Initialize critical data on login (but not for recovery sessions)
+      if (isAuth && !isRecovery) {
         try {
           await initializationService.initializeCriticalData();
         } catch (error) {
@@ -75,7 +81,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Don't block login if initialization fails
         }
       } else {
-        // Clear cache and real-time subscriptions on logout
+        // Clear cache and real-time subscriptions on logout or recovery
         // (Already done in logout function, but keep here as backup)
         initializationService.clearAll();
         realtimeService.cleanup();

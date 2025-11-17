@@ -44,6 +44,14 @@ class ConditionalStorage {
     }
   }
 
+  // Remove item from both storages (used during logout)
+  async removeItemFromAll(key: string): Promise<void> {
+    // Clear from persistent storage
+    await AsyncStorage.removeItem(key);
+    // Clear from memory storage
+    delete memoryStorage[key];
+  }
+
   // Clear in-memory storage (call when app closes if not persisting)
   clearMemoryStorage() {
     memoryStorage = {};

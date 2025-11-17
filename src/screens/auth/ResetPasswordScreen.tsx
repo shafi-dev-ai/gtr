@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { authService } from '../../services/auth';
+import { clearRecoveryMode } from '../../services/supabase';
 
 interface ResetPasswordScreenProps {
   navigation?: any;
@@ -66,6 +67,9 @@ export const ResetPasswordScreen: React.FC<ResetPasswordScreenProps> = React.mem
         return;
       }
 
+      // Clear recovery mode flag
+      clearRecoveryMode();
+      
       // Sign out after password update
       await authService.signOut();
       

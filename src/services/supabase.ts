@@ -2,6 +2,8 @@ import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
+import { CommonActions } from '@react-navigation/native';
+import { navigationRef } from '../navigation/RootNavigation';
 import { conditionalStorage } from './sessionStorage';
 
 const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -33,18 +35,102 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-// Handle deep links for email verification
-const handleDeepLink = async (url: string) => {
-  console.log('🔗 Deep link received:', url);
+// Global flag to track if we need to navigate to ResetPassword
+let shouldNavigateToResetPassword = false;
+
+// Global flag to indicate we're in password recovery mode (session should not be treated as authenticated)
+let isRecoverySession = false;
+
+// Helper function to navigate to ResetPassword screen
+const navigateToResetPassword = () => {
+  shouldNavigateToResetPassword = true;
   
+  const attemptNavigation = (retries = 0) => {
+    if (navigationRef.isReady()) {
+      try {
+        const currentRoute = navigationRef.getCurrentRoute();
+        const routeName = currentRoute?.name;
+        
+        // If we're on AppStack (Dashboard, etc.), wait for AuthStack to become active
+        const isOnAppStack = routeName === 'Dashboard' || routeName === 'AccountSettings' || 
+                            routeName === 'MyListings' || routeName === 'MyEvents' ||
+                            routeName === 'MyForumPosts' || routeName === 'MyGarage' ||
+                            routeName === 'LikedListings' || routeName === 'LikedEvents';
+        
+        if (isOnAppStack) {
+          // Wait for AuthContext to switch to AuthStack (recovery mode should make isAuthenticated = false)
+          if (retries < 20) {
+            setTimeout(() => attemptNavigation(retries + 1), 500);
+          } else {
+            console.error('AuthStack never became active after setting recovery session');
+            // Fallback: RootNavigator should handle this
+          }
+          return;
+        }
+        
+        // We're on AuthStack now, try to navigate
+        // Use CommonActions.reset to ensure we're on the right stack
+        try {
+          navigationRef.dispatch(
+            CommonActions.reset({
+              index: 0,
+              routes: [{ name: 'ResetPassword' as never }],
+            })
+          );
+          shouldNavigateToResetPassword = false;
+        } catch (resetError) {
+          // Fallback to regular navigate
+          navigationRef.navigate('ResetPassword' as never);
+          shouldNavigateToResetPassword = false;
+        }
+      } catch (navError: any) {
+        // If navigation fails, wait and retry
+        if (retries < 20) {
+          setTimeout(() => attemptNavigation(retries + 1), 500);
+        } else {
+          console.error('Failed to navigate to ResetPassword after multiple attempts');
+          // RootNavigator should handle this as fallback
+        }
+      }
+    } else {
+      // Navigation not ready yet, retry
+      if (retries < 20) {
+        setTimeout(() => attemptNavigation(retries + 1), 500);
+      } else {
+        console.error('Navigation never became ready');
+      }
+    }
+  };
+  
+  // Wait a bit for AuthContext to process the recovery session and switch stacks
+  setTimeout(() => attemptNavigation(), 1000);
+};
+
+// Export function to check if we should navigate (used by RootNavigator)
+export const shouldNavigateToResetPasswordScreen = () => {
+  return shouldNavigateToResetPassword;
+};
+
+// Export function to clear the flag
+export const clearResetPasswordNavigationFlag = () => {
+  shouldNavigateToResetPassword = false;
+};
+
+// Export function to check if we're in recovery mode
+export const isRecoveryMode = () => {
+  return isRecoverySession;
+};
+
+// Export function to clear recovery mode
+export const clearRecoveryMode = () => {
+  isRecoverySession = false;
+};
+
+// Handle deep links for email verification and password reset
+const handleDeepLink = async (url: string) => {
   if (!url) return;
 
   try {
-    // Supabase email verification flow:
-    // 1. User clicks link in email: https://your-project.supabase.co/auth/v1/verify?token=xxx&type=signup&redirect_to=gtr-marketplace://verify-email
-    // 2. Supabase verifies server-side and redirects to: gtr-marketplace://verify-email?token=xxx&type=signup
-    // 3. Our app receives the deep link - session should already be verified
-    
     let token: string | null = null;
     let type: string | null = null;
     
@@ -53,82 +139,167 @@ const handleDeepLink = async (url: string) => {
       const urlObj = new URL(url);
       token = urlObj.searchParams.get('token');
       type = urlObj.searchParams.get('type');
-      console.log('📧 Supabase redirect URL detected');
-      console.log('🔑 Extracted token:', token ? `${token.substring(0, 10)}...` : 'none');
-      console.log('📝 Extracted type:', type);
       
       // For Supabase redirect URLs, we need to verify the token
-      if (token && type === 'signup') {
-        console.log('✅ Verifying email with token from Supabase redirect...');
+      if (type === 'recovery') {
+        // Set recovery flag FIRST, before establishing session
+        isRecoverySession = true;
+        
+        const { data, error } = await supabase.auth.exchangeCodeForSession(url);
+
+        if (error) {
+          console.error('Password recovery session error:', error);
+        } else if (data.session) {
+          navigateToResetPassword();
+        }
+      } else if (token && type === 'signup') {
         const { data, error } = await supabase.auth.verifyOtp({
           token_hash: token,
           type: 'email',
         });
         
         if (error) {
-          console.error('❌ Email verification error:', error);
-          console.error('Error details:', JSON.stringify(error, null, 2));
-        } else {
-          console.log('✅ Email verified successfully!');
-          console.log('Session:', data?.session ? 'Created' : 'Not created');
-          console.log('User:', data?.user?.email);
+          console.error('Email verification error:', error);
         }
       }
     } else if (url.includes('gtr-marketplace://')) {
-      // Direct deep link - Supabase already verified, just check session
+      // Direct deep link - handle both email verification and password recovery
       const urlObj = new URL(url);
+      
+      // Supabase sends tokens in hash fragment (#access_token=...) not query params
+      // Parse both query params and hash fragment
       token = urlObj.searchParams.get('token');
       type = urlObj.searchParams.get('type');
-      console.log('📱 Direct deep link detected');
-      console.log('🔑 Extracted token:', token ? `${token.substring(0, 10)}...` : 'none');
-      console.log('📝 Extracted type:', type);
+      const code = urlObj.searchParams.get('code');
       
-      // Check if we have a valid session (Supabase should have verified already)
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      // Parse hash fragment (Supabase OAuth-style redirects use hash)
+      const hashMatch = url.match(/#(.+)/);
+      let hashParams: { [key: string]: string } = {};
+      if (hashMatch && hashMatch[1]) {
+        hashMatch[1].split('&').forEach(param => {
+          const [key, value] = param.split('=');
+          if (key && value) {
+            hashParams[key] = decodeURIComponent(value);
+          }
+        });
+      }
       
-      if (sessionError) {
-        console.error('❌ Error getting session:', sessionError);
-      } else if (session && session.user?.email_confirmed_at) {
-        console.log('✅ Email already verified! Session is valid.');
-        console.log('User:', session.user.email);
-      } else {
-        console.log('⚠️ Session not found or email not confirmed');
-        // Try to verify with token if we have one
-        if (token && type === 'signup') {
-          console.log('🔄 Attempting to verify with token...');
-          const { data, error } = await supabase.auth.verifyOtp({
-            token_hash: token,
-            type: 'email',
-          });
-          
-          if (error) {
-            console.error('❌ Email verification error:', error);
+      // Extract from hash if not in query params
+      const accessToken = hashParams.access_token || token;
+      const hashType = hashParams.type || type;
+      const hashCode = hashParams.code || code;
+      
+      // Extract path (before # or ?)
+      const pathMatch = url.match(/gtr-marketplace:\/\/([^?#]+)/);
+      const path = pathMatch ? pathMatch[1] : '';
+      
+      // Handle password recovery
+      if (path.includes('reset-password') || hashType === 'recovery' || hashCode || accessToken) {
+        // Set recovery flag FIRST, before establishing session
+        // This ensures AuthContext treats the session as unauthenticated
+        isRecoverySession = true;
+        
+        // Supabase sends access_token in hash - use it to set session manually
+        if (accessToken) {
+          try {
+            const refreshToken = hashParams.refresh_token;
+            
+            if (!refreshToken) {
+              console.error('No refresh_token found in hash');
+              // Try getSession anyway - Supabase might have set it
+              const { data: { session } } = await supabase.auth.getSession();
+              if (session) {
+                navigateToResetPassword();
+              }
+            } else {
+              // Manually set the session using access_token and refresh_token
+              const { data, error } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+              });
+              
+              if (error) {
+                console.error('Error setting session:', error);
+                // Fallback: try getSession - Supabase might have auto-set it
+                const { data: { session: fallbackSession } } = await supabase.auth.getSession();
+                if (fallbackSession) {
+                  navigateToResetPassword();
+                }
+              } else if (data.session) {
+                navigateToResetPassword();
+              } else {
+                console.error('setSession succeeded but no session returned');
+              }
+            }
+          } catch (tokenError: any) {
+            console.error('Error with access_token recovery:', tokenError);
+            // Last resort: try getSession
+            try {
+              const { data: { session: lastResortSession } } = await supabase.auth.getSession();
+              if (lastResortSession) {
+                navigateToResetPassword();
+              }
+            } catch (e) {
+              console.error('All session recovery methods failed');
+            }
+          }
+        } else if (hashCode) {
+          // Try code-based recovery
+          try {
+            const { data, error } = await supabase.auth.exchangeCodeForSession(hashCode);
+            
+            if (error) {
+              console.error('Password recovery session error:', error);
+            } else if (data?.session) {
+              navigateToResetPassword();
+            }
+          } catch (exchangeError: any) {
+            console.error('Error exchanging code:', exchangeError);
+          }
+        } else {
+          // Fallback: check if we already have a recovery session
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            navigateToResetPassword();
           } else {
-            console.log('✅ Email verified successfully!');
+            // Set flag anyway - Supabase might set session asynchronously
+            navigateToResetPassword();
+          }
+        }
+      } else if (type === 'signup' || path.includes('verify-email')) {
+        // Email verification flow
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error('Error getting session:', sessionError);
+        } else if (!session || !session.user?.email_confirmed_at) {
+          // Try to verify with token if we have one
+          if (token && type === 'signup') {
+            const { error } = await supabase.auth.verifyOtp({
+              token_hash: token,
+              type: 'email',
+            });
+            
+            if (error) {
+              console.error('Email verification error:', error);
+            }
           }
         }
       }
-    } else {
-      console.log('⚠️ Unknown URL format:', url);
     }
   } catch (err: any) {
-    console.error('❌ Error parsing deep link URL:', err);
-    console.error('URL was:', url);
-    console.error('Error message:', err.message);
-    console.error('Error stack:', err.stack);
+    console.error('Error parsing deep link URL:', err);
   }
 };
 
 // Handle deep links when app is already running
 Linking.addEventListener('url', (event) => {
-  console.log('🔔 URL event received (app running)');
   handleDeepLink(event.url);
 });
 
 // Handle initial URL when app opens from a link
 Linking.getInitialURL().then((url) => {
   if (url) {
-    console.log('🚀 Initial URL (app opened from link):', url);
     handleDeepLink(url);
   }
 });

@@ -173,6 +173,8 @@ React Native app for GT-R marketplace with Supabase backend. Features: listings,
 - ✅ My Content screens (Listings, Events, Forum Posts, Garage)
 - ✅ Liked Items screens (Listings, Events)
 - ✅ Updated listing card design with white spec cards
+- ✅ Email link-based password reset with deep linking
+- ✅ Secure logout (clears all session data)
 
 ### Pending/Incomplete
 
@@ -298,206 +300,78 @@ npm start
 
 ### Completed
 
-- ✅ **My Content Section** - Complete implementation:
+- ✅ **My Content**: My Listings, My Events, My Forum Posts, and My Garage screens (DataManager-powered, pull-to-refresh, loading/empty states, navigation from Profile).
+- ✅ **Liked Items**: Liked Listings and Liked Events screens with pull-to-refresh, loading/empty states, and auto-refresh after favorite changes.
+- ✅ **Listing Cards**: Updated specs design with individual white spec chips, applied to both horizontal and vertical cards.
+- ✅ **Services**: Favorites services fixed to return `listing_images` correctly and support user-specific queries.
 
-  - My Listings screen (user's created listings)
-  - My Events screen (user's created events)
-  - My Forum Posts screen (user's forum posts)
-  - My Garage screen (user's garage items)
-  - All screens use DataManager for caching
-  - Pull-to-refresh on all screens
-  - Loading and empty states
-  - Navigation from Profile screen
+### Notes
 
-- ✅ **Liked Items Section** - Complete implementation:
+- All profile sub-screens now share the centralized DataManager caching and refresh flow.
 
-  - Liked Listings screen (user's favorited listings)
-  - Liked Events screen (user's favorited events)
-  - Both screens use DataManager for caching
-  - Pull-to-refresh functionality
-  - Loading and empty states
-  - Auto-refresh after unfavorite action
-  - Navigation from Profile screen
+---
 
-- ✅ **Listing Card Design Update**:
+## Day 5 - Performance, Cache & Realtime
 
-  - Redesigned specs section with individual white cards
-  - Each spec has its own white rounded card
-  - Icon on top, text below (vertical layout)
-  - Dark icons and text on white background
-  - Applied to both ListingCard and ListingCardVertical
-  - Improved visual hierarchy and readability
+### Completed
 
-- ✅ **Service Updates**:
+- ✅ **Persistent Cache**: Added AsyncStorage-backed persistent cache so DataManager survives app restarts.
+- ✅ **Cache Config**: Tuned global TTL, increased max cache size, and improved request timeout/retry behavior.
+- ✅ **Hooks**: Simplified `useDataFetch` and `useInfiniteScroll` to use the async cache API and be more reliable.
+- ✅ **Realtime**: Implemented realtime subscriptions for listings, events, favorites, forum posts/comments, and profile stats with automatic cache invalidation.
+- ✅ **Marketplace**: Per-user cache keys and filtered results so users don't see their own listings in the main feed.
+- ✅ **Auth**: Unified logout behavior via `AuthContext.logout` instead of calling the auth service directly in screens.
 
-  - Fixed `favoritesService.getUserFavorites()` to return `listing_images` correctly
-  - Updated services to support user-specific queries
+### Remaining DataManager Improvements
 
-- ✅ **DataManager Integration & Improvements**:
+- **Offline support**: True offline browsing and queued writes when the network is unavailable.
+- **Cache strategy**: Finer-grained TTLs, better cache warming, and smarter prefetching.
+- **Error handling & resilience**: Richer retry strategies and clearer user-facing feedback.
+- **Monitoring**: Basic cache and performance metrics (hit/miss, size, request volume).
 
-  - **Pull-to-Refresh Implementation**:
+---
 
-    - Centralized pull-to-refresh on main ScrollView components
-    - All screens support pull-to-refresh (Dashboard, Profile, My Content, Liked Items)
-    - Refresh functions registered and called in batch
-    - Prevents duplicate refresh calls
-    - Loading indicators during refresh
+## Day 6 - Authentication & Security Fixes
 
-  - **Cache Management**:
+### Completed
 
-    - All new screens integrated with DataManager caching system
-    - User-specific cache keys (e.g., `user:favorites:listings:${userId}`)
-    - Cache TTL set to 2 minutes for favorites, 5 minutes for user content
-    - Stale-while-revalidate pattern for instant UI updates
-    - Cache invalidation on user actions (unfavorite, create, update, delete)
-    - Automatic cache refresh in background when stale
-
-  - **Data Fetching Optimizations**:
-
-    - `useDataFetch` hook used across all new screens
-    - Prioritized requests (HIGH priority for user content)
-    - Request deduplication prevents duplicate API calls
-    - Background prefetching for non-critical data
-    - Optimistic updates for favorite/unfavorite actions
-    - Cache-first approach with background refresh
-
-  - **Performance Improvements**:
-
-    - Instant UI updates from cache on screen load
-    - Background data refresh doesn't block UI
-    - Reduced API calls through intelligent caching
-    - Smooth navigation with pre-cached data
-    - Loading states only shown when no cache exists
-
-  - **Cache Invalidation**:
-    - Automatic cache invalidation on unfavorite action
-    - Manual cache refresh via pull-to-refresh
-    - Cache key invalidation for related data
-    - Prevents stale data from persisting
-
-- ⚠️ **DataManager Areas Needing Improvement**:
-
-  - **Cache Persistence**:
-
-    - Currently cache is in-memory only (lost on app restart)
-    - Need to implement persistent cache (AsyncStorage/SQLite)
-    - Cache size management for large datasets
-    - Cache eviction policies need tuning
-
-  - **Real-time Updates**:
-
-    - Cache doesn't update automatically on data changes from other devices
-    - Need real-time subscriptions for cache invalidation
-    - WebSocket integration for live updates
-    - Conflict resolution for concurrent updates
-
-  - **Offline Support**:
-
-    - No offline data access when network is unavailable
-    - Need SQLite local database for offline mode
-    - Sync mechanism for offline changes
-    - Queue system for pending actions
-
-  - **Cache Strategy**:
-
-    - TTL values need optimization based on data type
-    - Cache warming on app startup needs improvement
-    - Predictive prefetching not implemented
-    - Cache compression for large data sets
-
-  - **Error Handling**:
-
-    - Network error recovery needs improvement
-    - Retry logic for failed requests needs enhancement
-    - Error state management in cache needs work
-    - User feedback for cache-related errors
-
-  - **Monitoring & Analytics**:
-    - No cache hit/miss metrics
-    - No performance monitoring
-    - No cache size tracking
-    - No API call reduction metrics
+- ✅ **Password Reset Flow**: Migrated from OTP-based to email link-based password reset using Supabase's `resetPasswordForEmail` with deep linking.
+- ✅ **Deep Linking**: Fixed deep link handling for password recovery links - properly parses hash fragments (`#access_token=...`) and establishes recovery sessions.
+- ✅ **Recovery Session Handling**: Implemented recovery mode flag to prevent recovery sessions from being treated as authenticated sessions, ensuring users must reset password before accessing app.
+- ✅ **Logout Security**: Fixed critical security issue where logout wasn't clearing persisted session data, causing auto-login after app restart.
+  - Logout now clears session from both persistent (AsyncStorage) and memory storage
+  - Clears persistence preference on logout
+  - Ensures users are truly logged out and must sign in again
+- ✅ **Navigation Fixes**: Improved navigation to ResetPassword screen using `CommonActions.reset()` with fallback handling.
 
 ### Important Files
 
-- `src/screens/profile/MyListingsScreen.tsx` - My listings screen
-- `src/screens/profile/MyEventsScreen.tsx` - My events screen
-- `src/screens/profile/MyForumPostsScreen.tsx` - My forum posts screen
-- `src/screens/profile/MyGarageScreen.tsx` - My garage screen
-- `src/screens/profile/LikedListingsScreen.tsx` - Liked listings screen
-- `src/screens/profile/LikedEventsScreen.tsx` - Liked events screen
-- `src/components/shared/ListingCard.tsx` - Updated specs design
-- `src/components/shared/ListingCardVertical.tsx` - Updated specs design
-- `src/services/favorites.ts` - Fixed to return listing_images correctly
-- `App.js` - Added navigation routes for all new screens
+- `src/services/auth.ts` - Enhanced `signOut()` to clear all session storage
+- `src/services/sessionStorage.ts` - Added `removeItemFromAll()` method for complete cleanup
+- `src/services/supabase.ts` - Deep link handling, recovery session management, navigation logic
+- `src/context/AuthContext.tsx` - Recovery mode check to prevent auto-login during password reset
+- `src/screens/auth/ForgotPasswordScreen.tsx` - Updated to use email link instead of OTP
+- `src/screens/auth/ResetPasswordScreen.tsx` - Clears recovery mode after successful password reset
+- `App.js` - Enhanced RootNavigator with better navigation handling
 
-### UI/UX Improvements
+### Technical Notes
 
-- Individual white cards for each spec (mileage, year, transmission, condition)
-- Better visual contrast with white cards on dark background
-- Consistent design across horizontal and vertical listing cards
-- Improved spacing and readability
-- Empty states with helpful messages
-- Smooth pull-to-refresh animations
-- Loading states that don't block UI when cache exists
+- Password reset uses Supabase's email link flow with deep link: `gtr-marketplace://reset-password`
+- Recovery sessions are marked with `isRecoverySession` flag and treated as unauthenticated
+- Logout clears: session token, persistence preference, and memory storage
+- Deep links parse both query params and hash fragments (Supabase uses hash for OAuth-style redirects)
+- Navigation uses `CommonActions.reset()` to force stack reset when needed
 
-### DataManager Implementation Details
+### Bug Fixes
 
-**Cache Keys Used:**
-
-- `user:favorites:listings:${userId}` - User's favorited listings
-- `user:favorites:events:${userId}` - User's favorited events
-- `user:listings:${userId}` - User's created listings
-- `user:events:${userId}` - User's created events
-- `user:posts:${userId}` - User's forum posts
-- `user:garage:${userId}` - User's garage items
-
-**Cache Strategy:**
-
-- Cache TTL: 2-5 minutes depending on data type
-- Stale-while-revalidate: Always show cache immediately, refresh in background
-- Cache invalidation: On user actions (create, update, delete, favorite/unfavorite)
-- Request priority: HIGH for user content, MEDIUM for general data
-
-**Pull-to-Refresh Flow:**
-
-1. User pulls down to refresh
-2. All registered refresh functions called in parallel
-3. Cache invalidated for affected keys
-4. Fresh data fetched from API
-5. Cache updated with new data
-6. UI updated with fresh data
-7. Loading indicator dismissed
-
-**Performance Metrics:**
-
-- Cache hit rate: ~85% on subsequent screen visits
-- API call reduction: ~90% through caching
-- Average load time: <100ms from cache, ~500ms from API
-- Background refresh: Non-blocking, doesn't affect UI responsiveness
-
-### Navigation Structure
-
-```
-AppStack
-├── Dashboard (main screen with tabs)
-│   ├── Home (default)
-│   ├── Marketplace
-│   ├── Community (placeholder)
-│   ├── Events (placeholder)
-│   └── Profile
-│       ├── My Listings
-│       ├── My Events
-│       ├── My Forum Posts
-│       ├── My Garage
-│       ├── Liked Listings
-│       └── Liked Events
-└── AccountSettings
-```
+- Fixed auto-login after logout (session was persisting in AsyncStorage)
+- Fixed password reset screen not showing (navigation timing and stack detection)
+- Fixed recovery session being treated as authenticated (recovery mode flag)
+- Removed OTP-based password reset flow (replaced with email link)
 
 ---
 
 ## Last Updated
 
-**Date**: Day 4 - My Content & Liked Items Screens
-**Status**: Profile section complete with My Content and Liked Items screens, Listing card design updated with white spec cards, All screens integrated with DataManager caching system
+**Date**: Day 6 - Authentication & Security Fixes  
+**Status**: Authentication system secured with proper logout behavior and email link-based password reset. Deep linking fully functional for password recovery flow.

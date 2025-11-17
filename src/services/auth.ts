@@ -67,6 +67,20 @@ export const authService = {
   },
 
   async signOut() {
+    // Clear all session storage regardless of persistence preference
+    // This ensures user is truly logged out
+    const { conditionalStorage } = await import('./sessionStorage');
+    
+    // Clear session from BOTH persistent and memory storage (regardless of preference)
+    await conditionalStorage.removeItemFromAll('sb-auth-token');
+    
+    // Also clear the persistence preference so user has to explicitly choose again
+    await conditionalStorage.removeItemFromAll('persist_session_preference');
+    
+    // Clear memory storage as well
+    conditionalStorage.clearMemoryStorage();
+    
+    // Sign out from Supabase
     const { error } = await supabase.auth.signOut();
     return { error };
   },
@@ -103,25 +117,9 @@ export const authService = {
   },
 
   async resetPasswordForEmail(email: string) {
-    // Use signInWithOtp to send OTP code directly (no email template configuration needed)
-    // This sends a 6-digit OTP code to the email
-    const { data, error } = await supabase.auth.signInWithOtp({
-      email: email,
-      options: {
-        shouldCreateUser: false, // Don't create user if doesn't exist
-        emailRedirectTo: 'gtr-marketplace://reset-password', // Not used for OTP but required
-      },
-    });
-    return { data, error };
-  },
-
-  async verifyOTP(email: string, token: string) {
-    // Verify OTP for password recovery
-    // After verification, user will be authenticated and can update password
-    const { data, error } = await supabase.auth.verifyOtp({
-      email: email,
-      token: token,
-      type: 'email', // Use 'email' type for signInWithOtp verification
+    // Use Supabase's built-in password recovery email with deep link
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: 'gtr-marketplace://reset-password',
     });
     return { data, error };
   },

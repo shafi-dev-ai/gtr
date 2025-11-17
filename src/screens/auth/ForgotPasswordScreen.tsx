@@ -22,7 +22,7 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = React.m
   const [emailError, setEmailError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  const handleSendOTP = useCallback(async () => {
+  const handleSendResetLink = useCallback(async () => {
     setEmailError(null);
     setSuccess(false);
 
@@ -43,22 +43,18 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = React.m
 
       if (error) {
         // Generic error message for security
-        setEmailError('Unable to send reset code. Please try again.');
+        setEmailError('Unable to send reset link. Please try again.');
         setLoading(false);
         return;
       }
 
       setSuccess(true);
       setLoading(false);
-      // Navigate to OTP screen after a brief delay
-      setTimeout(() => {
-        navigation?.navigate('VerifyOTP', { email });
-      }, 1500);
     } catch (err: any) {
-      setEmailError('Unable to send reset code. Please try again.');
+      setEmailError('Unable to send reset link. Please try again.');
       setLoading(false);
     }
-  }, [email, navigation]);
+  }, [email]);
 
   const handleBackToLogin = useCallback(() => {
     navigation?.navigate('Login');
@@ -84,7 +80,8 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = React.m
 
           <Text style={styles.heading}>Forgot Password</Text>
           <Text style={styles.subtitle}>
-            Enter your email address and we'll send you a code to reset your password
+            Enter your email address and we'll send you a link to reset your password. You can
+            always request another link if the first one expires or you can't find it.
           </Text>
 
           <View style={styles.form}>
@@ -111,18 +108,18 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = React.m
               {emailError && <Text style={styles.fieldError}>{emailError}</Text>}
               {success && (
                 <Text style={styles.successText}>
-                  Reset code sent! Redirecting...
+                  Reset link sent! Please check your email.
                 </Text>
               )}
             </View>
 
             <TouchableOpacity
               style={[styles.sendButton, loading && styles.sendButtonDisabled]}
-              onPress={handleSendOTP}
+              onPress={handleSendResetLink}
               disabled={loading}
             >
               <Text style={styles.sendButtonText}>
-                {loading ? 'Sending...' : 'Send Reset Code'}
+                {loading ? 'Sending...' : 'Send Reset Link'}
               </Text>
             </TouchableOpacity>
           </View>

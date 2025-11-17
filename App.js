@@ -5,12 +5,13 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppState } from 'react-native';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { FavoritesProvider } from './src/context/FavoritesContext';
+import { navigationRef } from './src/navigation/RootNavigation';
+import { shouldNavigateToResetPasswordScreen, clearResetPasswordNavigationFlag } from './src/services/supabase';
 import { WelcomeScreen } from './src/screens/auth/WelcomeScreen';
 import { LoginScreen } from './src/screens/auth/LoginScreen';
 import { RegisterScreen } from './src/screens/auth/RegisterScreen';
 import { EmailVerificationScreen } from './src/screens/auth/EmailVerificationScreen';
 import { ForgotPasswordScreen } from './src/screens/auth/ForgotPasswordScreen';
-import { VerifyOTPScreen } from './src/screens/auth/VerifyOTPScreen';
 import { ResetPasswordScreen } from './src/screens/auth/ResetPasswordScreen';
 import { DashboardScreen } from './src/screens/app/DashboardScreen';
 import { AccountSettingsScreen } from './src/screens/profile/AccountSettingsScreen';
@@ -37,7 +38,6 @@ const AuthStack = () => {
       <Stack.Screen name="Register" component={RegisterScreen} />
       <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} />
       <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-      <Stack.Screen name="VerifyOTP" component={VerifyOTPScreen} />
       <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
     </Stack.Navigator>
   );
@@ -65,6 +65,37 @@ const AppStack = () => {
 const RootNavigator = () => {
   const { isAuthenticated, isLoading, isLoggingOut } = useAuth();
 
+  // Check if we need to navigate to ResetPassword when AuthStack becomes active
+  React.useEffect(() => {
+    if (!isLoading && !isAuthenticated && navigationRef.isReady()) {
+      // We're on AuthStack now, check if we should navigate to ResetPassword
+      if (shouldNavigateToResetPasswordScreen()) {
+        setTimeout(() => {
+          try {
+            // Use CommonActions.reset to ensure we navigate to ResetPassword
+            const { CommonActions } = require('@react-navigation/native');
+            navigationRef.dispatch(
+              CommonActions.reset({
+                index: 0,
+                routes: [{ name: 'ResetPassword' }],
+              })
+            );
+            clearResetPasswordNavigationFlag();
+          } catch (error) {
+            console.error('Failed to navigate to ResetPassword:', error);
+            // Fallback to regular navigate
+            try {
+              navigationRef.navigate('ResetPassword');
+              clearResetPasswordNavigationFlag();
+            } catch (fallbackError) {
+              console.error('Fallback navigation also failed:', fallbackError);
+            }
+          }
+        }, 500); // Small delay to ensure stack is fully mounted
+      }
+    }
+  }, [isAuthenticated, isLoading]);
+
   if (isLoading || isLoggingOut) {
     return (
       <View style={styles.loadingContainer}>
@@ -77,7 +108,7 @@ const RootNavigator = () => {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       {isAuthenticated ? <AppStack /> : <AuthStack />}
     </NavigationContainer>
   );
