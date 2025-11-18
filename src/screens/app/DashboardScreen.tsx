@@ -36,24 +36,19 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
   };
 
   const handleNotificationPress = () => {
-    if (navigation) {
-      navigation.navigate('Notification' as never);
-    } else {
-      console.log('Notifications pressed - navigation not available');
-    }
+    navigation?.navigate?.('Notification');
   };
 
   const handleMessagePress = () => {
-    if (navigation) {
-      navigation.navigate('Inbox' as never);
-    } else {
-      console.log('Messages pressed - navigation not available');
-    }
+    navigation?.navigate?.('Inbox');
   };
 
-  const handleListingPress = (listingId: string) => {
-    // TODO: Navigate to listing detail screen
-    console.log('Listing pressed:', listingId);
+  const handleListingPress = (listing: ListingWithImages) => {
+    if (!navigation) return;
+    navigation.navigate('ListingDetail', {
+      listingId: listing.id,
+      initialListing: listing,
+    });
   };
 
   const handleChatPress = async (listing: ListingWithImages) => {

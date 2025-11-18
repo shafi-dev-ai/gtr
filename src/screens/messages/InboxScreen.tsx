@@ -24,7 +24,7 @@ import { formatConversationTimestamp } from '../../utils/dateHelpers';
 type InboxTab = 'chats' | 'calls';
 
 export const InboxScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const [activeTab, setActiveTab] = useState<InboxTab>('chats');
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -89,14 +89,11 @@ export const InboxScreen: React.FC = () => {
   }, [conversations, searchTerm]);
 
   const handleConversationPress = (conversation: Conversation) => {
-    navigation.navigate(
-      'Chat' as never,
-      {
-        conversationId: conversation.id,
-        partner: conversation.partner,
-        conversation,
-      } as never
-    );
+    navigation.navigate('Chat', {
+      conversationId: conversation.id,
+      partner: conversation.partner,
+      conversation,
+    });
   };
 
   const renderConversation = ({ item }: { item: Conversation }) => {

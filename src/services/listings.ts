@@ -19,13 +19,20 @@ export const listingsService = {
         mileage,
         condition,
         transmission,
+        country,
         city,
         state,
+        zip_code,
+        street_address,
         location,
         description,
+        vin,
+        color,
         status,
         created_at,
-        listing_images (id, listing_id, image_url, is_primary, display_order)
+        updated_at,
+        sold_at,
+        listing_images (id, listing_id, image_url, storage_path, is_primary, display_order, created_at)
       `
       )
       .eq('status', 'active')
@@ -163,13 +170,20 @@ export const listingsService = {
         mileage,
         condition,
         transmission,
+        country,
         city,
         state,
+        zip_code,
+        street_address,
         location,
         description,
+        vin,
+        color,
         status,
         created_at,
-        listing_images (id, listing_id, image_url, is_primary, display_order)
+        updated_at,
+        sold_at,
+        listing_images (id, listing_id, image_url, storage_path, is_primary, display_order, created_at)
       `
       )
       .eq('model', model)
@@ -181,4 +195,3 @@ export const listingsService = {
     return data || [];
   },
 };
-

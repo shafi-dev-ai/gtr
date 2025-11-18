@@ -15,7 +15,7 @@ import { useAuth } from '../../context/AuthContext';
 
 interface MarketplaceScreenProps {
   initialSearchQuery?: string;
-  onListingPress?: (listingId: string) => void;
+  onListingPress?: (listing: ListingWithImages) => void;
   onChatPress?: (listing: ListingWithImages) => void;
   onFavorite?: (listingId: string) => void;
 }
@@ -156,7 +156,7 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
   const renderListing = ({ item }: { item: ListingWithImages }) => (
     <ListingCardVertical
       listing={item}
-      onPress={() => onListingPress?.(item.id)}
+      onPress={() => onListingPress?.(item)}
       onChatPress={() => onChatPress?.(item)}
       onFavorite={() => onFavorite?.(item.id)}
     />

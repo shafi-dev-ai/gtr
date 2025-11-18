@@ -13,6 +13,8 @@ export interface SearchFilters {
   state?: string;
   condition?: string;
   transmission?: string;
+  limit?: number;
+  offset?: number;
 }
 
 export const searchService = {
@@ -67,6 +69,9 @@ export const searchService = {
     limit: number = 15,
     offset: number = 0
   ): Promise<ListingWithImages[]> {
+    const effectiveLimit = filters.limit ?? limit;
+    const effectiveOffset = filters.offset ?? offset;
+
     let query = supabase
       .from('listings')
       .select(
@@ -128,7 +133,7 @@ export const searchService = {
     }
 
     // Pagination
-    query = query.range(offset, offset + limit - 1);
+    query = query.range(effectiveOffset, effectiveOffset + effectiveLimit - 1);
 
     // Order by
     query = query.order('created_at', { ascending: false });

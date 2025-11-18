@@ -4,11 +4,14 @@
 
 import { Notification, NotificationGroup, NotificationType } from '../types/notification.types';
 import { Ionicons } from '@expo/vector-icons';
+import type { ComponentProps } from 'react';
+
+type IoniconName = ComponentProps<typeof Ionicons>['name'];
 
 /**
  * Get icon name for notification type
  */
-export const getNotificationIcon = (type: NotificationType): keyof typeof Ionicons.glyphMap => {
+export const getNotificationIcon = (type: NotificationType): IoniconName => {
   switch (type) {
     case 'listing_favorited':
       return 'heart';
@@ -152,4 +155,3 @@ export const getActionLabel = (type: NotificationType): string => {
       return 'View';
   }
 };
-

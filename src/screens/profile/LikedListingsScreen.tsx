@@ -23,7 +23,7 @@ import dataManager from '../../services/dataManager';
 import { openChatWithUser } from '../../utils/chatHelpers';
 
 export const LikedListingsScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const { user } = useAuth();
   const { refreshListingFavorites, listingFavoritesVersion, favoriteListings: contextFavoriteListings } = useFavorites();
   const [refreshing, setRefreshing] = useState(false);
@@ -59,12 +59,14 @@ export const LikedListingsScreen: React.FC = () => {
     setRefreshing(false);
   }, [refresh, refreshListingFavorites]);
 
-  const handleListingPress = (listing: FavoriteListing) => {
-    // TODO: Navigate to listing detail
-    console.log('Listing pressed:', listing.id);
+  const handleListingPress = (listing: ListingWithImages) => {
+    navigation.navigate('ListingDetail', {
+      listingId: listing.id,
+      initialListing: listing,
+    });
   };
 
-  const handleChatPress = async (listing: FavoriteListing) => {
+  const handleChatPress = async (listing: ListingWithImages) => {
     if (!user?.id) {
       Alert.alert('Sign in required', 'Please sign in to chat with sellers.');
       return;

@@ -1,11 +1,12 @@
 import { createNavigationContainerRef } from '@react-navigation/native';
 
-export const navigationRef = createNavigationContainerRef();
+type GenericParamList = Record<string, object | undefined>;
+
+export const navigationRef = createNavigationContainerRef<GenericParamList>();
 
 export function navigate(name: string, params?: object) {
   if (navigationRef.isReady()) {
-    navigationRef.navigate(name as never, params as never);
+    navigationRef.navigate(name, params);
   }
 }
-
 

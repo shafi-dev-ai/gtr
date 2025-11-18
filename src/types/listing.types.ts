@@ -59,5 +59,6 @@ export interface CreateListingData {
   vin?: string;
   color?: string;
   transmission?: string;
+  status?: string;
+  sold_at?: string | null;
 }
-

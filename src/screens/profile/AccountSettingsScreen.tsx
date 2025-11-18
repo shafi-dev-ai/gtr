@@ -195,24 +195,27 @@ export const AccountSettingsScreen: React.FC<AccountSettingsScreenProps> = () =>
           style={styles.backButton}
           onPress={handleCancel}
           activeOpacity={0.7}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Account Settings</Text>
-        <TouchableOpacity
-          style={[styles.saveButton, (!hasChanges || saving) && styles.saveButtonDisabled]}
-          onPress={handleSave}
-          disabled={!hasChanges || saving}
-          activeOpacity={0.7}
-        >
-          {saving ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Text style={[styles.saveButtonText, (!hasChanges || saving) && styles.saveButtonTextDisabled]}>
-              Save
-            </Text>
-          )}
-        </TouchableOpacity>
+        <View style={styles.saveButtonWrapper}>
+          <TouchableOpacity
+            style={[styles.saveButton, (!hasChanges || saving) && styles.saveButtonDisabled]}
+            onPress={handleSave}
+            disabled={!hasChanges || saving}
+            activeOpacity={0.7}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={[styles.saveButtonText, (!hasChanges || saving) && styles.saveButtonTextDisabled]}>
+                Save
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -388,7 +391,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     flex: 1,
     textAlign: 'center',
-    marginLeft: -40, // Compensate for back button width
+  },
+  saveButtonWrapper: {
+    minWidth: 80,
+    alignItems: 'flex-end',
   },
   saveButton: {
     paddingHorizontal: 16,
@@ -510,4 +516,3 @@ const styles = StyleSheet.create({
     height: 40,
   },
 });
-

@@ -40,7 +40,7 @@ interface ListingReferencePayload {
 }
 
 export const ChatScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const route = useRoute();
   const { conversationId, partner } = (route.params as ChatRouteParams) || {};
   const { user } = useAuth();
@@ -201,17 +201,29 @@ export const ChatScreen: React.FC = () => {
     Alert.alert('Coming soon', 'Voice messages are coming soon.');
   };
 
+  const handleListingReferencePress = useCallback(
+    (payload: ListingReferencePayload) => {
+      if (!payload?.id) {
+        Alert.alert('Listing unavailable', 'This reference does not include enough information.');
+        return;
+      }
+      navigation.navigate('ListingDetail', {
+        listingId: payload.id,
+      });
+    },
+    [navigation]
+  );
+
   const renderListingContextBubble = (
-    info: { title: string | null; price: string | null; location: string | null }
+    info: { title: string | null; price: string | null; location: string | null },
+    payload: ListingReferencePayload
   ) => {
     if (!info) return null;
     return (
       <TouchableOpacity
         style={styles.listingContextCard}
         activeOpacity={0.7}
-        onPress={() =>
-          Alert.alert('Coming soon', 'Listing details will open here soon.')
-        }
+        onPress={() => handleListingReferencePress(payload)}
       >
         <View style={styles.listingContextIndicator} />
         <View style={styles.listingContextBody}>
@@ -235,7 +247,7 @@ export const ChatScreen: React.FC = () => {
     const listingPayload = parseListingReference(message.content);
     if (listingPayload) {
       const info = formatListingReferenceInfo(listingPayload);
-      return renderListingContextBubble(info);
+      return renderListingContextBubble(info, listingPayload);
     }
 
     const isOwnMessage = message.sender_id === user?.id;

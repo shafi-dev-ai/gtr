@@ -20,7 +20,7 @@ import { useDataFetch } from '../../hooks/useDataFetch';
 import dataManager, { RequestPriority } from '../../services/dataManager';
 
 export const MyListingsScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
@@ -46,7 +46,10 @@ export const MyListingsScreen: React.FC = () => {
   }, [user?.id]);
 
   const handleListingPress = (listing: ListingWithImages) => {
-    console.log('Listing pressed:', listing.id);
+    navigation.navigate('ListingDetail', {
+      listingId: listing.id,
+      initialListing: listing,
+    });
   };
 
   const handleToggleStatus = useCallback(
@@ -223,4 +226,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-

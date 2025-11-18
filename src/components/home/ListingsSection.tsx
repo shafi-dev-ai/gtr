@@ -14,7 +14,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - 48; // Screen width minus padding
 
 interface ListingsSectionProps {
-  onListingPress?: (listingId: string) => void;
+  onListingPress?: (listing: ListingWithImages) => void;
   onChatPress?: (listing: ListingWithImages) => void;
   onFavorite?: (listingId: string) => void;
   onSearchPress?: () => void;
@@ -205,7 +205,7 @@ export const ListingsSection: React.FC<ListingsSectionProps> = ({
           <ListingCard
             key={listing.id}
             listing={listing}
-            onPress={() => onListingPress?.(listing.id)}
+            onPress={() => onListingPress?.(listing)}
             onChatPress={() => onChatPress?.(listing)}
             onFavorite={() => onFavorite?.(listing.id)}
           />

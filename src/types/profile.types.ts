@@ -11,6 +11,12 @@ export interface Profile {
   location: string | null;
   created_at: string;
   updated_at: string;
+  favorite_listings_count?: number;
+  favorite_events_count?: number;
+  listings_count?: number;
+  events_count?: number;
+  posts_count?: number;
+  garage_count?: number;
 }
 
 export interface UpdateProfileData {
@@ -21,4 +27,3 @@ export interface UpdateProfileData {
   location?: string;
   phone_number?: string;
 }
-

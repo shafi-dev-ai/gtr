@@ -22,7 +22,7 @@ import {
 } from '../../utils/notificationHelpers';
 
 export const NotificationScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const [refreshing, setRefreshing] = useState(false);
 
   const { data: notifications, loading, refresh } = useDataFetch<Notification[]>({

@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS profiles (
   bio TEXT,
   avatar_url TEXT,
   location TEXT,
+  favorite_listings_count INTEGER DEFAULT 0,
+  favorite_events_count INTEGER DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -34,19 +36,25 @@ CREATE TABLE IF NOT EXISTS listings (
   mileage INTEGER,
   description TEXT,
   condition TEXT,
+  country TEXT,
   city TEXT,
   state TEXT,
   zip_code TEXT,
+  street_address TEXT,
   location TEXT,
   vin TEXT,
   color TEXT,
   transmission TEXT,
+  fuel_type TEXT,
+  drive_type TEXT,
+  horsepower INTEGER,
   status TEXT DEFAULT 'active',
   search_vector tsvector GENERATED ALWAYS AS (
     setweight(to_tsvector('english', COALESCE(title, '')), 'A') ||
     setweight(to_tsvector('english', COALESCE(description, '')), 'B') ||
     setweight(to_tsvector('english', COALESCE(city, '')), 'C') ||
     setweight(to_tsvector('english', COALESCE(state, '')), 'C') ||
+    setweight(to_tsvector('english', COALESCE(country, '')), 'C') ||
     setweight(to_tsvector('english', COALESCE(model, '')), 'C') ||
     setweight(to_tsvector('english', COALESCE(color, '')), 'D')
   ) STORED,
@@ -100,6 +108,9 @@ CREATE TABLE IF NOT EXISTS forum_comments (
   post_id UUID REFERENCES forum_posts(id) ON DELETE CASCADE NOT NULL,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   content TEXT NOT NULL,
+  parent_comment_id UUID REFERENCES forum_comments(id) ON DELETE CASCADE,
+  reply_count INTEGER DEFAULT 0,
+  like_count INTEGER DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -277,6 +288,57 @@ CREATE TABLE IF NOT EXISTS media_comments (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- 18. Listing Favorites Table
+CREATE TABLE IF NOT EXISTS listing_favorites (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  listing_id UUID REFERENCES listings(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(listing_id, user_id)
+);
+
+-- 19. Event Favorites Table
+CREATE TABLE IF NOT EXISTS event_favorites (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  event_id UUID REFERENCES events(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(event_id, user_id)
+);
+
+-- 20. Comment Likes Table
+CREATE TABLE IF NOT EXISTS comment_likes (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  comment_id UUID REFERENCES forum_comments(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(comment_id, user_id)
+);
+
+-- 21. Notifications Table
+CREATE TABLE IF NOT EXISTS notifications (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  data JSONB,
+  is_read BOOLEAN DEFAULT FALSE,
+  read_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 22. User Device Tokens Table
+CREATE TABLE IF NOT EXISTS user_device_tokens (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  device_token TEXT NOT NULL,
+  platform TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, device_token)
+);
+
 -- ============================================================================
 -- STEP 2: CREATE ALL INDEXES
 -- ============================================================================
@@ -291,25 +353,39 @@ CREATE INDEX IF NOT EXISTS idx_listings_year ON listings(year);
 CREATE INDEX IF NOT EXISTS idx_listings_city ON listings(city);
 CREATE INDEX IF NOT EXISTS idx_listings_state ON listings(state);
 CREATE INDEX IF NOT EXISTS idx_listings_city_state ON listings(city, state);
+CREATE INDEX IF NOT EXISTS idx_listings_country ON listings(country);
+CREATE INDEX IF NOT EXISTS idx_listings_country_state ON listings(country, state);
+CREATE INDEX IF NOT EXISTS idx_listings_country_state_city ON listings(country, state, city) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_listings_search_vector ON listings USING GIN(search_vector);
 CREATE INDEX IF NOT EXISTS idx_listings_model_year ON listings(model, year);
 CREATE INDEX IF NOT EXISTS idx_listings_status_price ON listings(status, price) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_listings_state_city_model ON listings(state, city, model) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_listings_status_created ON listings(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_listings_user_status ON listings(user_id, status);
 
 -- Listing images indexes
-CREATE INDEX IF NOT EXISTS idx_listing_images_listing_id ON listing_images(listing_id);
+CREATE INDEX IF NOT EXISTS idx_listing_images_listing_id ON listing_images(listing_id, is_primary);
 
 -- User garage indexes
 CREATE INDEX IF NOT EXISTS idx_user_garage_user_id ON user_garage(user_id);
+
+-- Profile indexes
+CREATE INDEX IF NOT EXISTS idx_profiles_username ON profiles(username);
+CREATE INDEX IF NOT EXISTS idx_profiles_location ON profiles(location);
 
 -- Forum posts indexes
 CREATE INDEX IF NOT EXISTS idx_forum_posts_model ON forum_posts(model);
 CREATE INDEX IF NOT EXISTS idx_forum_posts_user_id ON forum_posts(user_id);
 CREATE INDEX IF NOT EXISTS idx_forum_posts_created_at ON forum_posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_forum_posts_search ON forum_posts USING GIN(
+  to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(content, ''))
+);
 
 -- Forum comments indexes
 CREATE INDEX IF NOT EXISTS idx_forum_comments_post_id ON forum_comments(post_id);
 CREATE INDEX IF NOT EXISTS idx_forum_comments_user_id ON forum_comments(user_id);
+CREATE INDEX IF NOT EXISTS idx_forum_comments_parent_comment_id ON forum_comments(parent_comment_id);
+CREATE INDEX IF NOT EXISTS idx_forum_comments_post_parent ON forum_comments(post_id, parent_comment_id);
 
 -- Post likes indexes
 CREATE INDEX IF NOT EXISTS idx_post_likes_post_id ON post_likes(post_id);
@@ -318,6 +394,9 @@ CREATE INDEX IF NOT EXISTS idx_post_likes_user_id ON post_likes(user_id);
 -- Events indexes
 CREATE INDEX IF NOT EXISTS idx_events_start_date ON events(start_date);
 CREATE INDEX IF NOT EXISTS idx_events_event_type ON events(event_type);
+CREATE INDEX IF NOT EXISTS idx_events_created_by ON events(created_by);
+CREATE INDEX IF NOT EXISTS idx_events_location ON events(location);
+CREATE INDEX IF NOT EXISTS idx_events_upcoming ON events(start_date) WHERE start_date > NOW();
 
 -- Event RSVPs indexes
 CREATE INDEX IF NOT EXISTS idx_event_rsvps_event_id ON event_rsvps(event_id);
@@ -362,6 +441,33 @@ CREATE INDEX IF NOT EXISTS idx_media_comments_media_id ON media_comments(media_i
 CREATE INDEX IF NOT EXISTS idx_media_comments_user_id ON media_comments(user_id);
 CREATE INDEX IF NOT EXISTS idx_media_comments_created_at ON media_comments(created_at DESC);
 
+-- Listing favorites indexes
+CREATE INDEX IF NOT EXISTS idx_listing_favorites_listing_id ON listing_favorites(listing_id);
+CREATE INDEX IF NOT EXISTS idx_listing_favorites_user_id ON listing_favorites(user_id);
+CREATE INDEX IF NOT EXISTS idx_listing_favorites_created_at ON listing_favorites(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_listing_favorites_user_listing ON listing_favorites(user_id, listing_id);
+
+-- Event favorites indexes
+CREATE INDEX IF NOT EXISTS idx_event_favorites_event_id ON event_favorites(event_id);
+CREATE INDEX IF NOT EXISTS idx_event_favorites_user_id ON event_favorites(user_id);
+CREATE INDEX IF NOT EXISTS idx_event_favorites_created_at ON event_favorites(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_event_favorites_user_event ON event_favorites(user_id, event_id);
+
+-- Comment likes indexes
+CREATE INDEX IF NOT EXISTS idx_comment_likes_comment_id ON comment_likes(comment_id);
+CREATE INDEX IF NOT EXISTS idx_comment_likes_user_id ON comment_likes(user_id);
+CREATE INDEX IF NOT EXISTS idx_comment_likes_created_at ON comment_likes(created_at DESC);
+
+-- Notifications indexes
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, is_read) WHERE is_read = FALSE;
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type);
+
+-- User device tokens indexes
+CREATE INDEX IF NOT EXISTS idx_user_device_tokens_user_id ON user_device_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_device_tokens_token ON user_device_tokens(device_token);
+
 -- ============================================================================
 -- STEP 3: ENABLE RLS AND CREATE POLICIES
 -- ============================================================================
@@ -391,6 +497,12 @@ CREATE POLICY "Users can delete images from their listings" ON listing_images FO
   EXISTS (SELECT 1 FROM listings WHERE listings.id = listing_images.listing_id AND listings.user_id = auth.uid())
 );
 
+-- Listing Favorites Policies
+ALTER TABLE listing_favorites ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Listing favorites are viewable by everyone" ON listing_favorites FOR SELECT USING (true);
+CREATE POLICY "Authenticated users can favorite listings" ON listing_favorites FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can unfavorite their own listings" ON listing_favorites FOR DELETE USING (auth.uid() = user_id);
+
 -- User Garage Policies
 ALTER TABLE user_garage ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "User garage is viewable by everyone" ON user_garage FOR SELECT USING (true);
@@ -418,6 +530,12 @@ CREATE POLICY "Post likes are viewable by everyone" ON post_likes FOR SELECT USI
 CREATE POLICY "Authenticated users can like posts" ON post_likes FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can unlike posts" ON post_likes FOR DELETE USING (auth.uid() = user_id);
 
+-- Comment Likes Policies
+ALTER TABLE comment_likes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Comment likes are viewable by everyone" ON comment_likes FOR SELECT USING (true);
+CREATE POLICY "Authenticated users can like comments" ON comment_likes FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can unlike their comment likes" ON comment_likes FOR DELETE USING (auth.uid() = user_id);
+
 -- Events Policies
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Events are viewable by everyone" ON events FOR SELECT USING (true);
@@ -430,6 +548,12 @@ CREATE POLICY "RSVPs are viewable by everyone" ON event_rsvps FOR SELECT USING (
 CREATE POLICY "Authenticated users can RSVP" ON event_rsvps FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can update their RSVP" ON event_rsvps FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "Users can delete their RSVP" ON event_rsvps FOR DELETE USING (auth.uid() = user_id);
+
+-- Event Favorites Policies
+ALTER TABLE event_favorites ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Event favorites are viewable by everyone" ON event_favorites FOR SELECT USING (true);
+CREATE POLICY "Authenticated users can favorite events" ON event_favorites FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can unfavorite events" ON event_favorites FOR DELETE USING (auth.uid() = user_id);
 
 -- Saved Searches Policies
 ALTER TABLE saved_searches ENABLE ROW LEVEL SECURITY;
@@ -454,6 +578,13 @@ CREATE POLICY "Users can send messages" ON messages FOR INSERT TO authenticated 
 );
 CREATE POLICY "Users can update their own sent messages" ON messages FOR UPDATE USING (auth.uid() = sender_id);
 CREATE POLICY "Recipients can mark messages as read" ON messages FOR UPDATE USING (auth.uid() = recipient_id) WITH CHECK (auth.uid() = recipient_id);
+
+-- Notifications Policies
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view their own notifications" ON notifications FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "System can create notifications" ON notifications FOR INSERT WITH CHECK (true);
+CREATE POLICY "Users can update their own notifications" ON notifications FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own notifications" ON notifications FOR DELETE USING (auth.uid() = user_id);
 
 -- Model Specs Policies
 ALTER TABLE model_specs ENABLE ROW LEVEL SECURITY;
@@ -481,6 +612,48 @@ CREATE POLICY "Authenticated users can create comments" ON media_comments FOR IN
 CREATE POLICY "Users can update their own comments" ON media_comments FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "Users can delete their own comments" ON media_comments FOR DELETE USING (auth.uid() = user_id);
 
+-- User Device Tokens Policies
+ALTER TABLE user_device_tokens ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view their own device tokens" ON user_device_tokens FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own device tokens" ON user_device_tokens FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own device tokens" ON user_device_tokens FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own device tokens" ON user_device_tokens FOR DELETE USING (auth.uid() = user_id);
+
+-- Storage Bucket Policies for Avatars
+DROP POLICY IF EXISTS "Authenticated users can upload avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update their own avatar" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their own avatar" ON storage.objects;
+DROP POLICY IF EXISTS "Public can view avatars" ON storage.objects;
+
+CREATE POLICY "Authenticated users can upload avatars"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (
+  bucket_id = 'avatars'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Users can update their own avatar"
+ON storage.objects FOR UPDATE
+TO authenticated
+USING (
+  bucket_id = 'avatars'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Users can delete their own avatar"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (
+  bucket_id = 'avatars'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Public can view avatars"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'avatars');
+
 -- ============================================================================
 -- STEP 4: CREATE FUNCTIONS
 -- ============================================================================
@@ -494,62 +667,65 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Function: Create profile on signup (handles email, OAuth: Google/Apple/Facebook, and phone)
+-- Function: Create profile on signup with robust error handling
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER 
+SECURITY DEFINER
+SET search_path = public
+LANGUAGE plpgsql
+AS $$
 BEGIN
-  INSERT INTO public.profiles (id, username, full_name, email, avatar_url, phone_number)
-  VALUES (
-    NEW.id,
-    -- Username: NULL for now (users can set it later in profile settings)
-    -- For OAuth providers, try to extract username if available
-    COALESCE(
-      NEW.raw_user_meta_data->>'username',
-      NEW.raw_user_meta_data->>'preferred_username',
-      NEW.raw_user_meta_data->>'user_name',
-      NULL
-    ),
-    -- Full name: Extract from OAuth providers (Google, Apple, Facebook) or signup form
-    -- Google: 'name' or 'given_name' + 'family_name'
-    -- Apple: 'full_name' or 'given_name' + 'family_name'
-    -- Facebook: 'name'
-    COALESCE(
-      NEW.raw_user_meta_data->>'full_name',
-      NEW.raw_user_meta_data->>'name',
-      CASE 
-        WHEN NEW.raw_user_meta_data->>'given_name' IS NOT NULL 
-        THEN TRIM(COALESCE(NEW.raw_user_meta_data->>'given_name', '') || ' ' || COALESCE(NEW.raw_user_meta_data->>'family_name', ''))
-        ELSE NULL
-      END,
-      NEW.raw_user_meta_data->>'display_name',
-      NEW.app_metadata->>'full_name',
-      NEW.app_metadata->>'name',
-      ''
-    ),
-    -- Email: from auth.users.email (works for all providers)
-    COALESCE(NEW.email, ''),
-    -- Avatar: Extract from OAuth providers
-    -- Google: 'picture'
-    -- Facebook: 'picture' (from Graph API)
-    -- Apple: Usually NULL (no avatar)
-    COALESCE(
-      NEW.raw_user_meta_data->>'avatar_url',
-      NEW.raw_user_meta_data->>'picture',
-      NEW.raw_user_meta_data->>'avatar',
-      NEW.app_metadata->>'avatar_url',
-      NEW.app_metadata->>'picture',
-      NULL
-    ),
-    -- Phone: from meta data (if provided during signup) or auth.users.phone
-    COALESCE(
-      NEW.raw_user_meta_data->>'phone_number',
-      NEW.phone,
-      NULL
-    )
-  );
+  BEGIN
+    INSERT INTO public.profiles (id, username, full_name, email, avatar_url, phone_number)
+    VALUES (
+      NEW.id,
+      COALESCE(
+        NEW.raw_user_meta_data->>'username',
+        NEW.raw_user_meta_data->>'preferred_username',
+        NEW.raw_user_meta_data->>'user_name',
+        NULL
+      ),
+      COALESCE(
+        NEW.raw_user_meta_data->>'full_name',
+        NEW.raw_user_meta_data->>'name',
+        CASE 
+          WHEN NEW.raw_user_meta_data->>'given_name' IS NOT NULL 
+          THEN TRIM(COALESCE(NEW.raw_user_meta_data->>'given_name', '') || ' ' || COALESCE(NEW.raw_user_meta_data->>'family_name', ''))
+          ELSE NULL
+        END,
+        NEW.raw_user_meta_data->>'display_name',
+        NEW.app_metadata->>'full_name',
+        NEW.app_metadata->>'name',
+        ''
+      ),
+      COALESCE(NEW.email, ''),
+      COALESCE(
+        NEW.raw_user_meta_data->>'avatar_url',
+        NEW.raw_user_meta_data->>'picture',
+        NEW.raw_user_meta_data->>'avatar',
+        NEW.app_metadata->>'avatar_url',
+        NEW.app_metadata->>'picture',
+        NULL
+      ),
+      COALESCE(
+        NEW.raw_user_meta_data->>'phone_number',
+        NEW.phone,
+        NULL
+      )
+    );
+  EXCEPTION
+    WHEN unique_violation THEN
+      RAISE WARNING 'Profile already exists for user %', NEW.id;
+    WHEN OTHERS THEN
+      RAISE WARNING 'Error creating profile for user %: %', NEW.id, SQLERRM;
+  END;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.handle_new_user() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.handle_new_user() TO anon;
+GRANT EXECUTE ON FUNCTION public.handle_new_user() TO service_role;
 
 -- Function: Update comment count on forum posts
 CREATE OR REPLACE FUNCTION update_forum_post_comment_count()
@@ -700,6 +876,837 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 GRANT EXECUTE ON FUNCTION search_listings TO authenticated;
 GRANT EXECUTE ON FUNCTION search_listings TO anon;
 
+-- Function: Update user favorite listings count
+CREATE OR REPLACE FUNCTION update_user_favorite_count()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    UPDATE profiles
+    SET favorite_listings_count = favorite_listings_count + 1
+    WHERE id = NEW.user_id;
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    UPDATE profiles
+    SET favorite_listings_count = GREATEST(favorite_listings_count - 1, 0)
+    WHERE id = OLD.user_id;
+    RETURN OLD;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function: Update user favorite events count
+CREATE OR REPLACE FUNCTION update_user_favorite_events_count()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    UPDATE profiles
+    SET favorite_events_count = favorite_events_count + 1
+    WHERE id = NEW.user_id;
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    UPDATE profiles
+    SET favorite_events_count = GREATEST(favorite_events_count - 1, 0)
+    WHERE id = OLD.user_id;
+    RETURN OLD;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function: Get user favorite listings
+CREATE OR REPLACE FUNCTION get_user_favorite_listings(
+  p_user_id UUID,
+  p_limit INTEGER DEFAULT 50,
+  p_offset INTEGER DEFAULT 0
+)
+RETURNS TABLE (
+  id UUID,
+  user_id UUID,
+  title TEXT,
+  model TEXT,
+  year INTEGER,
+  price DECIMAL,
+  mileage INTEGER,
+  description TEXT,
+  condition TEXT,
+  city TEXT,
+  state TEXT,
+  zip_code TEXT,
+  location TEXT,
+  vin TEXT,
+  color TEXT,
+  transmission TEXT,
+  status TEXT,
+  created_at TIMESTAMP WITH TIME ZONE,
+  updated_at TIMESTAMP WITH TIME ZONE,
+  favorited_at TIMESTAMP WITH TIME ZONE
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    l.id,
+    l.user_id,
+    l.title,
+    l.model,
+    l.year,
+    l.price,
+    l.mileage,
+    l.description,
+    l.condition,
+    l.city,
+    l.state,
+    l.zip_code,
+    l.location,
+    l.vin,
+    l.color,
+    l.transmission,
+    l.status,
+    l.created_at,
+    l.updated_at,
+    lf.created_at AS favorited_at
+  FROM listing_favorites lf
+  INNER JOIN listings l ON lf.listing_id = l.id
+  WHERE lf.user_id = p_user_id
+  ORDER BY lf.created_at DESC
+  LIMIT p_limit OFFSET p_offset;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION get_user_favorite_listings(UUID, INTEGER, INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_user_favorite_listings(UUID, INTEGER, INTEGER) TO anon;
+
+-- Function: Check if user has favorited listing
+CREATE OR REPLACE FUNCTION has_user_favorited_listing(
+  p_user_id UUID,
+  p_listing_id UUID
+)
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM listing_favorites
+    WHERE user_id = p_user_id AND listing_id = p_listing_id
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION has_user_favorited_listing(UUID, UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION has_user_favorited_listing(UUID, UUID) TO anon;
+
+-- Function: Get user favorite events
+CREATE OR REPLACE FUNCTION get_user_favorite_events(
+  p_user_id UUID,
+  p_limit INTEGER DEFAULT 50,
+  p_offset INTEGER DEFAULT 0
+)
+RETURNS TABLE (
+  id UUID,
+  created_by UUID,
+  title TEXT,
+  description TEXT,
+  event_type TEXT,
+  location TEXT,
+  latitude DECIMAL,
+  longitude DECIMAL,
+  start_date TIMESTAMP WITH TIME ZONE,
+  end_date TIMESTAMP WITH TIME ZONE,
+  rsvp_count INTEGER,
+  max_attendees INTEGER,
+  cover_image_url TEXT,
+  created_at TIMESTAMP WITH TIME ZONE,
+  updated_at TIMESTAMP WITH TIME ZONE,
+  favorited_at TIMESTAMP WITH TIME ZONE
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    e.id,
+    e.created_by,
+    e.title,
+    e.description,
+    e.event_type,
+    e.location,
+    e.latitude,
+    e.longitude,
+    e.start_date,
+    e.end_date,
+    e.rsvp_count,
+    e.max_attendees,
+    e.cover_image_url,
+    e.created_at,
+    e.updated_at,
+    ef.created_at AS favorited_at
+  FROM event_favorites ef
+  INNER JOIN events e ON ef.event_id = e.id
+  WHERE ef.user_id = p_user_id
+  ORDER BY ef.created_at DESC
+  LIMIT p_limit OFFSET p_offset;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION get_user_favorite_events(UUID, INTEGER, INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_user_favorite_events(UUID, INTEGER, INTEGER) TO anon;
+
+-- Function: Check if user has favorited event
+CREATE OR REPLACE FUNCTION has_user_favorited_event(
+  p_user_id UUID,
+  p_event_id UUID
+)
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM event_favorites
+    WHERE user_id = p_user_id AND event_id = p_event_id
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION has_user_favorited_event(UUID, UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION has_user_favorited_event(UUID, UUID) TO anon;
+
+-- Function: Update comment reply count
+CREATE OR REPLACE FUNCTION update_comment_reply_count()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.parent_comment_id IS NOT NULL THEN
+      UPDATE forum_comments
+      SET reply_count = reply_count + 1
+      WHERE id = NEW.parent_comment_id;
+    END IF;
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    IF OLD.parent_comment_id IS NOT NULL THEN
+      UPDATE forum_comments
+      SET reply_count = GREATEST(reply_count - 1, 0)
+      WHERE id = OLD.parent_comment_id;
+    END IF;
+    RETURN OLD;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function: Update comment like count
+CREATE OR REPLACE FUNCTION update_comment_like_count()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    UPDATE forum_comments
+    SET like_count = like_count + 1
+    WHERE id = NEW.comment_id;
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    UPDATE forum_comments
+    SET like_count = GREATEST(like_count - 1, 0)
+    WHERE id = OLD.comment_id;
+    RETURN OLD;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function: Get comment replies
+CREATE OR REPLACE FUNCTION get_comment_replies(
+  p_comment_id UUID,
+  p_limit INTEGER DEFAULT 50,
+  p_offset INTEGER DEFAULT 0
+)
+RETURNS TABLE (
+  id UUID,
+  post_id UUID,
+  user_id UUID,
+  content TEXT,
+  parent_comment_id UUID,
+  reply_count INTEGER,
+  like_count INTEGER,
+  created_at TIMESTAMP WITH TIME ZONE,
+  updated_at TIMESTAMP WITH TIME ZONE
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    c.id,
+    c.post_id,
+    c.user_id,
+    c.content,
+    c.parent_comment_id,
+    c.reply_count,
+    c.like_count,
+    c.created_at,
+    c.updated_at
+  FROM forum_comments c
+  WHERE c.parent_comment_id = p_comment_id
+  ORDER BY c.created_at ASC
+  LIMIT p_limit OFFSET p_offset;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION get_comment_replies(UUID, INTEGER, INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_comment_replies(UUID, INTEGER, INTEGER) TO anon;
+
+-- Function: Get nested post comments
+CREATE OR REPLACE FUNCTION get_post_comments_nested(
+  p_post_id UUID,
+  p_limit INTEGER DEFAULT 100,
+  p_offset INTEGER DEFAULT 0
+)
+RETURNS TABLE (
+  id UUID,
+  post_id UUID,
+  user_id UUID,
+  content TEXT,
+  parent_comment_id UUID,
+  reply_count INTEGER,
+  like_count INTEGER,
+  created_at TIMESTAMP WITH TIME ZONE,
+  updated_at TIMESTAMP WITH TIME ZONE,
+  depth INTEGER
+) AS $$
+BEGIN
+  RETURN QUERY
+  WITH RECURSIVE comment_tree AS (
+    SELECT
+      c.id,
+      c.post_id,
+      c.user_id,
+      c.content,
+      c.parent_comment_id,
+      c.reply_count,
+      c.like_count,
+      c.created_at,
+      c.updated_at,
+      0 AS depth
+    FROM forum_comments c
+    WHERE c.post_id = p_post_id
+      AND c.parent_comment_id IS NULL
+
+    UNION ALL
+
+    SELECT
+      c.id,
+      c.post_id,
+      c.user_id,
+      c.content,
+      c.parent_comment_id,
+      c.reply_count,
+      c.like_count,
+      c.created_at,
+      c.updated_at,
+      ct.depth + 1
+    FROM forum_comments c
+    INNER JOIN comment_tree ct ON c.parent_comment_id = ct.id
+    WHERE ct.depth < 5
+  )
+  SELECT * FROM comment_tree
+  ORDER BY created_at ASC
+  LIMIT p_limit OFFSET p_offset;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION get_post_comments_nested(UUID, INTEGER, INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_post_comments_nested(UUID, INTEGER, INTEGER) TO anon;
+
+-- Function: Check if user liked a comment
+CREATE OR REPLACE FUNCTION has_user_liked_comment(
+  p_user_id UUID,
+  p_comment_id UUID
+)
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM comment_likes
+    WHERE user_id = p_user_id AND comment_id = p_comment_id
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION has_user_liked_comment(UUID, UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION has_user_liked_comment(UUID, UUID) TO anon;
+
+-- Function: Get user stats
+CREATE OR REPLACE FUNCTION get_user_stats(p_user_id UUID)
+RETURNS JSON AS $$
+DECLARE
+  stats JSON;
+BEGIN
+  SELECT json_build_object(
+    'listings_count', (
+      SELECT COUNT(*) FROM listings WHERE user_id = p_user_id AND status = 'active'
+    ),
+    'events_count', (
+      SELECT COUNT(*) FROM events WHERE created_by = p_user_id
+    ),
+    'posts_count', (
+      SELECT COUNT(*) FROM forum_posts WHERE user_id = p_user_id
+    ),
+    'garage_count', (
+      SELECT COUNT(*) FROM user_garage WHERE user_id = p_user_id
+    ),
+    'liked_listings_count', (
+      SELECT COALESCE(favorite_listings_count, 0) FROM profiles WHERE id = p_user_id
+    ),
+    'liked_events_count', (
+      SELECT COALESCE(favorite_events_count, 0) FROM profiles WHERE id = p_user_id
+    )
+  ) INTO stats;
+  RETURN stats;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION get_user_stats(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_user_stats(UUID) TO anon;
+
+-- Device token updated_at helper
+CREATE OR REPLACE FUNCTION update_device_token_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Notifications helper functions
+CREATE OR REPLACE FUNCTION create_notification(
+  p_user_id UUID,
+  p_type TEXT,
+  p_title TEXT,
+  p_body TEXT,
+  p_data JSONB DEFAULT NULL
+)
+RETURNS UUID AS $$
+DECLARE
+  v_notification_id UUID;
+BEGIN
+  INSERT INTO notifications (user_id, type, title, body, data)
+  VALUES (p_user_id, p_type, p_title, p_body, p_data)
+  RETURNING id INTO v_notification_id;
+  RETURN v_notification_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION mark_notification_read(p_notification_id UUID)
+RETURNS void AS $$
+BEGIN
+  UPDATE notifications
+  SET is_read = TRUE, read_at = NOW()
+  WHERE id = p_notification_id AND user_id = auth.uid();
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION mark_all_notifications_read()
+RETURNS void AS $$
+BEGIN
+  UPDATE notifications
+  SET is_read = TRUE, read_at = NOW()
+  WHERE user_id = auth.uid() AND is_read = FALSE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION get_unread_notification_count()
+RETURNS INTEGER AS $$
+DECLARE
+  v_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO v_count
+  FROM notifications
+  WHERE user_id = auth.uid() AND is_read = FALSE;
+  RETURN COALESCE(v_count, 0);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION create_notification(UUID, TEXT, TEXT, TEXT, JSONB) TO authenticated;
+GRANT EXECUTE ON FUNCTION mark_notification_read(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION mark_all_notifications_read() TO authenticated;
+GRANT EXECUTE ON FUNCTION get_unread_notification_count() TO authenticated;
+GRANT EXECUTE ON FUNCTION get_unread_notification_count() TO anon;
+
+-- Notification trigger helpers
+CREATE OR REPLACE FUNCTION notify_listing_favorited()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_listing_title TEXT;
+  v_favoriter_name TEXT;
+  v_listing_owner_id UUID;
+BEGIN
+  SELECT user_id, title INTO v_listing_owner_id, v_listing_title
+  FROM listings WHERE id = NEW.listing_id;
+
+  IF v_listing_owner_id IS NULL OR v_listing_owner_id = NEW.user_id THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT COALESCE(full_name, username, 'Someone') INTO v_favoriter_name
+  FROM profiles WHERE id = NEW.user_id;
+
+  PERFORM create_notification(
+    v_listing_owner_id,
+    'listing_favorited',
+    'Your listing was favorited!',
+    v_favoriter_name || ' favorited your listing: ' || COALESCE(v_listing_title, 'GT-R'),
+    jsonb_build_object(
+      'listing_id', NEW.listing_id,
+      'user_id', NEW.user_id,
+      'favorite_id', NEW.id
+    )
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION notify_event_rsvp()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_event_title TEXT;
+  v_rsvper_name TEXT;
+  v_event_creator_id UUID;
+BEGIN
+  SELECT created_by, title INTO v_event_creator_id, v_event_title
+  FROM events WHERE id = NEW.event_id;
+
+  IF v_event_creator_id IS NULL OR v_event_creator_id = NEW.user_id THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT COALESCE(full_name, username, 'Someone') INTO v_rsvper_name
+  FROM profiles WHERE id = NEW.user_id;
+
+  PERFORM create_notification(
+    v_event_creator_id,
+    'event_rsvp',
+    'New RSVP to your event!',
+    v_rsvper_name || ' is going to: ' || COALESCE(v_event_title, 'your event'),
+    jsonb_build_object(
+      'event_id', NEW.event_id,
+      'user_id', NEW.user_id,
+      'rsvp_id', NEW.id,
+      'status', NEW.status
+    )
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION notify_event_favorited()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_event_title TEXT;
+  v_favoriter_name TEXT;
+  v_event_creator_id UUID;
+BEGIN
+  SELECT created_by, title INTO v_event_creator_id, v_event_title
+  FROM events WHERE id = NEW.event_id;
+
+  IF v_event_creator_id IS NULL OR v_event_creator_id = NEW.user_id THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT COALESCE(full_name, username, 'Someone') INTO v_favoriter_name
+  FROM profiles WHERE id = NEW.user_id;
+
+  PERFORM create_notification(
+    v_event_creator_id,
+    'event_favorited',
+    'Your event was favorited!',
+    v_favoriter_name || ' favorited your event: ' || COALESCE(v_event_title, 'Event'),
+    jsonb_build_object(
+      'event_id', NEW.event_id,
+      'user_id', NEW.user_id,
+      'favorite_id', NEW.id
+    )
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION notify_forum_comment()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_post_title TEXT;
+  v_commenter_name TEXT;
+  v_post_owner_id UUID;
+BEGIN
+  IF NEW.parent_comment_id IS NOT NULL THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT user_id, title INTO v_post_owner_id, v_post_title
+  FROM forum_posts WHERE id = NEW.post_id;
+
+  IF v_post_owner_id IS NULL OR v_post_owner_id = NEW.user_id THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT COALESCE(full_name, username, 'Someone') INTO v_commenter_name
+  FROM profiles WHERE id = NEW.user_id;
+
+  PERFORM create_notification(
+    v_post_owner_id,
+    'forum_comment',
+    'New comment on your post!',
+    v_commenter_name || ' commented on: ' || COALESCE(v_post_title, 'your post'),
+    jsonb_build_object(
+      'post_id', NEW.post_id,
+      'comment_id', NEW.id,
+      'user_id', NEW.user_id
+    )
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION notify_forum_reply()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_post_title TEXT;
+  v_replier_name TEXT;
+  v_comment_owner_id UUID;
+BEGIN
+  IF NEW.parent_comment_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT title INTO v_post_title FROM forum_posts WHERE id = NEW.post_id;
+  SELECT COALESCE(full_name, username, 'Someone') INTO v_replier_name FROM profiles WHERE id = NEW.user_id;
+  SELECT user_id INTO v_comment_owner_id FROM forum_comments WHERE id = NEW.parent_comment_id;
+
+  IF v_comment_owner_id IS NOT NULL AND v_comment_owner_id <> NEW.user_id THEN
+    PERFORM create_notification(
+      v_comment_owner_id,
+      'forum_reply',
+      'New reply to your comment!',
+      v_replier_name || ' replied to your comment on: ' || COALESCE(v_post_title, 'a post'),
+      jsonb_build_object(
+        'post_id', NEW.post_id,
+        'comment_id', NEW.id,
+        'parent_comment_id', NEW.parent_comment_id,
+        'user_id', NEW.user_id
+      )
+    );
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION notify_forum_like()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_post_title TEXT;
+  v_liker_name TEXT;
+  v_post_owner_id UUID;
+BEGIN
+  SELECT user_id, title INTO v_post_owner_id, v_post_title
+  FROM forum_posts WHERE id = NEW.post_id;
+
+  IF v_post_owner_id IS NULL OR v_post_owner_id = NEW.user_id THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT COALESCE(full_name, username, 'Someone') INTO v_liker_name
+  FROM profiles WHERE id = NEW.user_id;
+
+  PERFORM create_notification(
+    v_post_owner_id,
+    'forum_like',
+    'Your post was liked!',
+    v_liker_name || ' liked your post: ' || COALESCE(v_post_title, 'Post'),
+    jsonb_build_object(
+      'post_id', NEW.post_id,
+      'user_id', NEW.user_id,
+      'like_id', NEW.id
+    )
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION notify_new_message()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_sender_name TEXT;
+  v_message_preview TEXT;
+BEGIN
+  SELECT COALESCE(full_name, username, 'Someone') INTO v_sender_name
+  FROM profiles WHERE id = NEW.sender_id;
+
+  v_message_preview := LEFT(NEW.content, 50);
+  IF LENGTH(NEW.content) > 50 THEN
+    v_message_preview := v_message_preview || '...';
+  END IF;
+
+  PERFORM create_notification(
+    NEW.recipient_id,
+    'message',
+    'New message from ' || v_sender_name,
+    v_message_preview,
+    jsonb_build_object(
+      'conversation_id', NEW.conversation_id,
+      'message_id', NEW.id,
+      'sender_id', NEW.sender_id
+    )
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Cursor-based pagination for listings
+CREATE OR REPLACE FUNCTION get_listings_cursor(
+  p_cursor TIMESTAMPTZ DEFAULT NULL,
+  p_limit INTEGER DEFAULT 10,
+  p_city TEXT DEFAULT NULL,
+  p_state TEXT DEFAULT NULL,
+  p_min_price NUMERIC DEFAULT NULL,
+  p_max_price NUMERIC DEFAULT NULL,
+  p_model TEXT DEFAULT NULL
+)
+RETURNS TABLE (
+  id UUID,
+  user_id UUID,
+  title TEXT,
+  description TEXT,
+  price NUMERIC,
+  city TEXT,
+  state TEXT,
+  model TEXT,
+  status TEXT,
+  created_at TIMESTAMPTZ,
+  next_cursor TIMESTAMPTZ,
+  has_more BOOLEAN
+) AS $$
+BEGIN
+  RETURN QUERY
+  WITH filtered_listings AS (
+    SELECT *
+    FROM listings
+    WHERE status = 'active'
+      AND (p_cursor IS NULL OR created_at < p_cursor)
+      AND (p_city IS NULL OR city ILIKE '%' || p_city || '%')
+      AND (p_state IS NULL OR state = p_state)
+      AND (p_min_price IS NULL OR price >= p_min_price)
+      AND (p_max_price IS NULL OR price <= p_max_price)
+      AND (p_model IS NULL OR model = p_model)
+    ORDER BY created_at DESC
+    LIMIT p_limit + 1
+  ),
+  results AS (
+    SELECT * FROM filtered_listings LIMIT p_limit
+  )
+  SELECT
+    r.id,
+    r.user_id,
+    r.title,
+    r.description,
+    r.price,
+    r.city,
+    r.state,
+    r.model,
+    r.status,
+    r.created_at,
+    (SELECT created_at FROM filtered_listings OFFSET p_limit LIMIT 1) AS next_cursor,
+    (SELECT COUNT(*) > p_limit FROM filtered_listings) AS has_more
+  FROM results r
+  ORDER BY r.created_at DESC;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+GRANT EXECUTE ON FUNCTION get_listings_cursor(TIMESTAMPTZ, INTEGER, TEXT, TEXT, NUMERIC, NUMERIC, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_listings_cursor(TIMESTAMPTZ, INTEGER, TEXT, TEXT, NUMERIC, NUMERIC, TEXT) TO anon;
+
+-- Cursor-based pagination for forum posts
+CREATE OR REPLACE FUNCTION get_forum_posts_cursor(
+  p_cursor TIMESTAMPTZ DEFAULT NULL,
+  p_limit INTEGER DEFAULT 10,
+  p_model TEXT DEFAULT NULL
+)
+RETURNS TABLE (
+  id UUID,
+  user_id UUID,
+  title TEXT,
+  content TEXT,
+  model TEXT,
+  created_at TIMESTAMPTZ,
+  next_cursor TIMESTAMPTZ,
+  has_more BOOLEAN
+) AS $$
+BEGIN
+  RETURN QUERY
+  WITH filtered_posts AS (
+    SELECT *
+    FROM forum_posts
+    WHERE (p_cursor IS NULL OR created_at < p_cursor)
+      AND (p_model IS NULL OR model = p_model)
+    ORDER BY created_at DESC
+    LIMIT p_limit + 1
+  ),
+  results AS (
+    SELECT * FROM filtered_posts LIMIT p_limit
+  )
+  SELECT
+    r.id,
+    r.user_id,
+    r.title,
+    r.content,
+    r.model,
+    r.created_at,
+    (SELECT created_at FROM filtered_posts OFFSET p_limit LIMIT 1) AS next_cursor,
+    (SELECT COUNT(*) > p_limit FROM filtered_posts) AS has_more
+  FROM results r
+  ORDER BY r.created_at DESC;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+GRANT EXECUTE ON FUNCTION get_forum_posts_cursor(TIMESTAMPTZ, INTEGER, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_forum_posts_cursor(TIMESTAMPTZ, INTEGER, TEXT) TO anon;
+
+-- Cursor-based pagination for events
+CREATE OR REPLACE FUNCTION get_events_cursor(
+  p_cursor TIMESTAMPTZ DEFAULT NULL,
+  p_limit INTEGER DEFAULT 10,
+  p_location TEXT DEFAULT NULL
+)
+RETURNS TABLE (
+  id UUID,
+  created_by UUID,
+  title TEXT,
+  description TEXT,
+  location TEXT,
+  start_date TIMESTAMPTZ,
+  created_at TIMESTAMPTZ,
+  next_cursor TIMESTAMPTZ,
+  has_more BOOLEAN
+) AS $$
+BEGIN
+  RETURN QUERY
+  WITH filtered_events AS (
+    SELECT *
+    FROM events
+    WHERE start_date >= NOW()
+      AND (p_cursor IS NULL OR start_date > p_cursor)
+      AND (p_location IS NULL OR location ILIKE '%' || p_location || '%')
+    ORDER BY start_date ASC
+    LIMIT p_limit + 1
+  ),
+  results AS (
+    SELECT * FROM filtered_events LIMIT p_limit
+  )
+  SELECT
+    r.id,
+    r.created_by,
+    r.title,
+    r.description,
+    r.location,
+    r.start_date,
+    r.created_at,
+    (SELECT start_date FROM filtered_events OFFSET p_limit LIMIT 1) AS next_cursor,
+    (SELECT COUNT(*) > p_limit FROM filtered_events) AS has_more
+  FROM results r
+  ORDER BY r.start_date ASC;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+GRANT EXECUTE ON FUNCTION get_events_cursor(TIMESTAMPTZ, INTEGER, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_events_cursor(TIMESTAMPTZ, INTEGER, TEXT) TO anon;
+
 -- ============================================================================
 -- STEP 5: CREATE TRIGGERS
 -- ============================================================================
@@ -716,10 +1723,14 @@ CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXEC
 -- Forum comment count triggers
 CREATE TRIGGER update_comment_count_on_insert AFTER INSERT ON forum_comments FOR EACH ROW EXECUTE FUNCTION update_forum_post_comment_count();
 CREATE TRIGGER update_comment_count_on_delete AFTER DELETE ON forum_comments FOR EACH ROW EXECUTE FUNCTION update_forum_post_comment_count();
+CREATE TRIGGER update_reply_count_on_insert AFTER INSERT ON forum_comments FOR EACH ROW EXECUTE FUNCTION update_comment_reply_count();
+CREATE TRIGGER update_reply_count_on_delete AFTER DELETE ON forum_comments FOR EACH ROW EXECUTE FUNCTION update_comment_reply_count();
 
 -- Forum like count triggers
 CREATE TRIGGER update_like_count_on_insert AFTER INSERT ON post_likes FOR EACH ROW EXECUTE FUNCTION update_forum_post_like_count();
 CREATE TRIGGER update_like_count_on_delete AFTER DELETE ON post_likes FOR EACH ROW EXECUTE FUNCTION update_forum_post_like_count();
+CREATE TRIGGER update_comment_like_count_on_insert AFTER INSERT ON comment_likes FOR EACH ROW EXECUTE FUNCTION update_comment_like_count();
+CREATE TRIGGER update_comment_like_count_on_delete AFTER DELETE ON comment_likes FOR EACH ROW EXECUTE FUNCTION update_comment_like_count();
 
 -- Event RSVP count triggers
 CREATE TRIGGER update_rsvp_count_on_insert AFTER INSERT ON event_rsvps FOR EACH ROW EXECUTE FUNCTION update_event_rsvp_count();
@@ -729,6 +1740,12 @@ CREATE TRIGGER update_rsvp_count_on_delete AFTER DELETE ON event_rsvps FOR EACH 
 CREATE TRIGGER update_conversation_on_message_insert AFTER INSERT ON messages FOR EACH ROW EXECUTE FUNCTION update_conversation_on_message();
 CREATE TRIGGER update_conversation_on_message_update AFTER UPDATE ON messages FOR EACH ROW EXECUTE FUNCTION update_conversation_on_message();
 
+-- Favorite count triggers
+CREATE TRIGGER update_user_favorite_count_on_insert AFTER INSERT ON listing_favorites FOR EACH ROW EXECUTE FUNCTION update_user_favorite_count();
+CREATE TRIGGER update_user_favorite_count_on_delete AFTER DELETE ON listing_favorites FOR EACH ROW EXECUTE FUNCTION update_user_favorite_count();
+CREATE TRIGGER update_user_favorite_events_count_on_insert AFTER INSERT ON event_favorites FOR EACH ROW EXECUTE FUNCTION update_user_favorite_events_count();
+CREATE TRIGGER update_user_favorite_events_count_on_delete AFTER DELETE ON event_favorites FOR EACH ROW EXECUTE FUNCTION update_user_favorite_events_count();
+
 -- Media like count triggers
 CREATE TRIGGER update_media_like_count_on_insert AFTER INSERT ON media_likes FOR EACH ROW EXECUTE FUNCTION update_media_like_count();
 CREATE TRIGGER update_media_like_count_on_delete AFTER DELETE ON media_likes FOR EACH ROW EXECUTE FUNCTION update_media_like_count();
@@ -736,6 +1753,18 @@ CREATE TRIGGER update_media_like_count_on_delete AFTER DELETE ON media_likes FOR
 -- Media comment count triggers
 CREATE TRIGGER update_media_comment_count_on_insert AFTER INSERT ON media_comments FOR EACH ROW EXECUTE FUNCTION update_media_comment_count();
 CREATE TRIGGER update_media_comment_count_on_delete AFTER DELETE ON media_comments FOR EACH ROW EXECUTE FUNCTION update_media_comment_count();
+
+-- Device token triggers
+CREATE TRIGGER update_device_token_updated_at BEFORE UPDATE ON user_device_tokens FOR EACH ROW EXECUTE FUNCTION update_device_token_updated_at();
+
+-- Notification triggers
+CREATE TRIGGER trigger_listing_favorited AFTER INSERT ON listing_favorites FOR EACH ROW EXECUTE FUNCTION notify_listing_favorited();
+CREATE TRIGGER trigger_event_rsvp AFTER INSERT ON event_rsvps FOR EACH ROW EXECUTE FUNCTION notify_event_rsvp();
+CREATE TRIGGER trigger_event_favorited AFTER INSERT ON event_favorites FOR EACH ROW EXECUTE FUNCTION notify_event_favorited();
+CREATE TRIGGER trigger_forum_comment AFTER INSERT ON forum_comments FOR EACH ROW EXECUTE FUNCTION notify_forum_comment();
+CREATE TRIGGER trigger_forum_reply AFTER INSERT ON forum_comments FOR EACH ROW EXECUTE FUNCTION notify_forum_reply();
+CREATE TRIGGER trigger_forum_like AFTER INSERT ON post_likes FOR EACH ROW EXECUTE FUNCTION notify_forum_like();
+-- CREATE TRIGGER trigger_new_message AFTER INSERT ON messages FOR EACH ROW EXECUTE FUNCTION notify_new_message();
 
 -- ============================================================================
 -- STEP 6: ENABLE REAL-TIME SUBSCRIPTIONS
@@ -750,6 +1779,10 @@ ALTER PUBLICATION supabase_realtime ADD TABLE messages;
 ALTER PUBLICATION supabase_realtime ADD TABLE community_media;
 ALTER PUBLICATION supabase_realtime ADD TABLE media_likes;
 ALTER PUBLICATION supabase_realtime ADD TABLE media_comments;
+ALTER PUBLICATION supabase_realtime ADD TABLE listing_favorites;
+ALTER PUBLICATION supabase_realtime ADD TABLE event_favorites;
+ALTER PUBLICATION supabase_realtime ADD TABLE comment_likes;
+ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
 
 -- ============================================================================
 -- SETUP COMPLETE!
@@ -766,4 +1799,3 @@ ALTER PUBLICATION supabase_realtime ADD TABLE media_comments;
 -- 2. Configure authentication providers in Authentication → Providers
 -- 3. Test your setup by creating a test user
 -- ============================================================================
-

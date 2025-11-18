@@ -16,7 +16,7 @@ export const forumService = {
     // Fetch posts without profile join first (only required fields)
     const { data: posts, error: postsError } = await supabase
       .from('forum_posts')
-      .select('id, user_id, model, title, content, image_urls, like_count, comment_count, created_at')
+      .select('id, user_id, model, title, content, image_urls, like_count, comment_count, created_at, updated_at')
       .order('created_at', { ascending: false })
       .limit(limit);
 
@@ -93,7 +93,7 @@ export const forumService = {
     // Fetch posts without profile join first (only required fields)
     const { data: posts, error: postsError } = await supabase
       .from('forum_posts')
-      .select('id, user_id, model, title, content, image_urls, like_count, comment_count, created_at')
+      .select('id, user_id, model, title, content, image_urls, like_count, comment_count, created_at, updated_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
@@ -143,7 +143,7 @@ export const forumService = {
     // Fetch comments without profile join first (only required fields)
     const { data: comments, error: commentsError } = await supabase
       .from('forum_comments')
-      .select('id, post_id, user_id, content, created_at')
+      .select('id, post_id, user_id, content, created_at, updated_at')
       .eq('post_id', postId)
       .order('created_at', { ascending: true })
       .limit(limit || 100);
@@ -176,7 +176,7 @@ export const forumService = {
     // Fetch all comments for these posts in one query
     const { data: comments, error: commentsError } = await supabase
       .from('forum_comments')
-      .select('id, post_id, user_id, content, created_at')
+      .select('id, post_id, user_id, content, created_at, updated_at')
       .in('post_id', postIds)
       .order('created_at', { ascending: true })
       .limit(500); // Limit total comments fetched
@@ -285,4 +285,3 @@ export const forumService = {
     return !!data;
   },
 };
-

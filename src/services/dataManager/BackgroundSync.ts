@@ -1,4 +1,4 @@
-import dataManager, { RequestPriority } from './DataManager';
+import dataManager from '.';
 
 interface PrefetchTask {
   key: string;
@@ -72,4 +72,3 @@ class BackgroundSync {
 }
 
 export default BackgroundSync;
-

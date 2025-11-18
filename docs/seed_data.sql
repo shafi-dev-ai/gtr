@@ -354,6 +354,15 @@ BEGIN
   VALUES
     (listing7_id, 'https://picsum.photos/1200/800?random=701', 'listing-images/listing7-1.jpg', true, 0),
     (listing7_id, 'https://picsum.photos/1200/800?random=702', 'listing-images/listing7-2.jpg', false, 1);
+
+  -- Sample listing favorites
+  INSERT INTO listing_favorites (listing_id, user_id)
+  VALUES
+    (listing1_id, '2e54e24f-85ab-47ef-96ff-6b69b148d2c4'),
+    (listing2_id, '186dc8cb-c6dd-4e79-97be-eb477d100352'),
+    (listing3_id, '2e54e24f-85ab-47ef-96ff-6b69b148d2c4'),
+    (listing4_id, '33c95074-90c4-4891-809c-ae1e32691aa5')
+  ON CONFLICT DO NOTHING;
 END $$;
 
 -- ============================================================================
@@ -482,6 +491,43 @@ BEGIN
 END $$;
 
 -- ============================================================================
+-- STEP 6B: ADD FORUM COMMENT REPLIES & LIKES
+-- ============================================================================
+
+INSERT INTO forum_comments (post_id, user_id, content, parent_comment_id)
+SELECT post_id, '186dc8cb-c6dd-4e79-97be-eb477d100352', 'Appreciate the feedback! Leaning toward Armytrix now.', id
+FROM forum_comments
+WHERE content = 'I have Armytrix on my R34. Sounds amazing! Not too loud for daily use.'
+LIMIT 1;
+
+INSERT INTO forum_comments (post_id, user_id, content, parent_comment_id)
+SELECT post_id, '2e54e24f-85ab-47ef-96ff-6b69b148d2c4', 'Thanks! Took almost 2 years but worth it.', id
+FROM forum_comments
+WHERE content = 'Beautiful restoration! How long did it take?'
+LIMIT 1;
+
+INSERT INTO comment_likes (comment_id, user_id)
+SELECT id, '33c95074-90c4-4891-809c-ae1e32691aa5'
+FROM forum_comments
+WHERE content = 'I have Armytrix on my R34. Sounds amazing! Not too loud for daily use.'
+LIMIT 1
+ON CONFLICT DO NOTHING;
+
+INSERT INTO comment_likes (comment_id, user_id)
+SELECT id, '186dc8cb-c6dd-4e79-97be-eb477d100352'
+FROM forum_comments
+WHERE content = 'Akrapovic is great too, but Armytrix has better sound IMO.'
+LIMIT 1
+ON CONFLICT DO NOTHING;
+
+INSERT INTO comment_likes (comment_id, user_id)
+SELECT id, '2e54e24f-85ab-47ef-96ff-6b69b148d2c4'
+FROM forum_comments
+WHERE content = 'Wow! That looks incredible. Great work!'
+LIMIT 1
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
 -- STEP 7: CREATE EVENTS
 -- ============================================================================
 
@@ -535,6 +581,14 @@ BEGIN
     (event2_id, '2e54e24f-85ab-47ef-96ff-6b69b148d2c4', 'going'),
     (event2_id, '186dc8cb-c6dd-4e79-97be-eb477d100352', 'going'),
     (event2_id, '33c95074-90c4-4891-809c-ae1e32691aa5', 'going');
+
+  -- Sample event favorites
+  INSERT INTO event_favorites (event_id, user_id)
+  VALUES
+    (event1_id, '33c95074-90c4-4891-809c-ae1e32691aa5'),
+    (event2_id, '186dc8cb-c6dd-4e79-97be-eb477d100352'),
+    (event2_id, '33c95074-90c4-4891-809c-ae1e32691aa5')
+  ON CONFLICT DO NOTHING;
 END $$;
 
 -- ============================================================================
@@ -766,6 +820,35 @@ VALUES
   );
 
 -- ============================================================================
+-- STEP 12: SAMPLE NOTIFICATIONS & DEVICE TOKENS
+-- ============================================================================
+
+INSERT INTO notifications (user_id, type, title, body, data, is_read)
+VALUES
+  (
+    '186dc8cb-c6dd-4e79-97be-eb477d100352',
+    'listing_favorited',
+    'Your listing was favorited!',
+    'Mike Chen favorited your 2020 GT-R Premium listing.',
+    jsonb_build_object('listing_id', (SELECT id FROM listings WHERE title = '2020 Nissan GT-R Premium - Immaculate Condition' LIMIT 1)),
+    FALSE
+  ),
+  (
+    '2e54e24f-85ab-47ef-96ff-6b69b148d2c4',
+    'event_rsvp',
+    'New RSVP to your event!',
+    'Alex Johnson is going to Miami GT-R Meet & Greet.',
+    jsonb_build_object('event_id', (SELECT id FROM events WHERE title = 'Miami GT-R Meet & Greet' LIMIT 1)),
+    TRUE
+  );
+
+INSERT INTO user_device_tokens (user_id, device_token, platform)
+VALUES
+  ('186dc8cb-c6dd-4e79-97be-eb477d100352', 'expo-token-user1-device1', 'ios'),
+  ('2e54e24f-85ab-47ef-96ff-6b69b148d2c4', 'expo-token-user2-device1', 'android')
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
 -- SEED DATA COMPLETE!
 -- ============================================================================
 -- Summary:
@@ -775,6 +858,9 @@ VALUES
 -- ✓ 20+ Listing images
 -- ✓ 4 User garage entries
 -- ✓ 4 Forum posts with comments and likes
+-- ✓ Forum comment replies & likes seeded
+-- ✓ Listing & event favorites populated
+-- ✓ Notifications and device tokens seeded
 -- ✓ 2 Events with RSVPs
 -- ✓ 2 Conversations with messages
 -- ✓ 4 Parts listings
@@ -784,4 +870,3 @@ VALUES
 -- All data uses placeholder images from picsum.photos
 -- You can replace these URLs later with actual Supabase Storage URLs
 -- ============================================================================
-

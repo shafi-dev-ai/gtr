@@ -33,7 +33,7 @@ class InitializationService {
       ),
       dataManager.fetch(
         'home:listings:nearby:5',
-        () => listingsService.getNearbyListings(5),
+        () => listingsService.getAllListings(5),
         { priority: RequestPriority.HIGH }
       ),
       dataManager.fetch(
@@ -45,23 +45,38 @@ class InitializationService {
       dataManager.fetch(
         `profile:stats:${user.id}`,
         async () => {
+          const formatStats = (stats: any) => ({
+            listings: stats?.listings_count || 0,
+            events: stats?.events_count || 0,
+            posts: stats?.posts_count || 0,
+            garage: stats?.garage_count || 0,
+            likedListings:
+              stats?.liked_listings_count ??
+              stats?.favorite_listings_count ??
+              0,
+            likedEvents:
+              stats?.liked_events_count ??
+              stats?.favorite_events_count ??
+              0,
+          });
+
           try {
             const { data, error } = await supabase.rpc('get_user_stats', {
               p_user_id: user.id,
             });
             if (error) throw error;
-            return data;
+            return formatStats(data);
           } catch {
             // Fallback to individual queries if RPC fails
             const profile = await profilesService.getCurrentUserProfile();
-            return {
+            return formatStats({
               listings_count: 0,
               events_count: 0,
               posts_count: 0,
               garage_count: 0,
               favorite_listings_count: profile?.favorite_listings_count || 0,
               favorite_events_count: profile?.favorite_events_count || 0,
-            };
+            });
           }
         },
         { priority: RequestPriority.HIGH }
@@ -108,7 +123,7 @@ class InitializationService {
     // User's own listings
     this.backgroundSync.addTask(
       `listings:user:${this.userId}`,
-      () => listingsService.getListingsByUserId(this.userId!)
+      () => listingsService.getUserListings(this.userId!)
     );
 
     // User's own events
@@ -172,4 +187,3 @@ class InitializationService {
 }
 
 export const initializationService = new InitializationService();
-

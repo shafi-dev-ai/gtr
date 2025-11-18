@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { Image, ImageProps } from 'expo-image';
-import { ImageCache } from 'expo-image';
 
 interface OptimizedImageProps extends Omit<ImageProps, 'source'> {
   source: string | { uri: string };
@@ -33,7 +32,7 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
 
     // Preload image if high priority
     if (priority === 'high' && uri) {
-      ImageCache.prefetch(uri).catch(() => {
+      Image.prefetch(uri).catch(() => {
         // Silently fail prefetch
       });
     }
@@ -103,4 +102,3 @@ const styles = StyleSheet.create({
     backgroundColor: '#333333',
   },
 });
-

@@ -6,10 +6,12 @@ import { supabase } from './supabase';
 let Notifications: any = null;
 let isNotificationsAvailable = false;
 const isExpoGo = Constants.executionEnvironment === 'storeClient';
+const expoConfig = (Constants as any)?.expoConfig ?? {};
+const easConfig = (Constants as any)?.easConfig ?? {};
 const expoProjectId =
-  Constants?.expoConfig?.extra?.eas?.projectId ||
-  Constants?.expoConfig?.projectId ||
-  Constants?.easConfig?.projectId ||
+  expoConfig?.extra?.eas?.projectId ||
+  expoConfig?.projectId ||
+  easConfig?.projectId ||
   null;
 const isAndroidWithoutExpoProject = Platform.OS === 'android' && !expoProjectId;
 let hasLoggedMissingFcmWarning = false;

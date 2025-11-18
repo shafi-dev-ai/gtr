@@ -426,7 +426,29 @@ npm start
 
 ---
 
+## Day 8 - Listing Detail Experience & Database Consolidation
+
+### Completed
+
+- ✅ New `ListingDetailScreen` matching the latest design (carousel, status/favorite controls, specs, owner/buyer actions, chat CTA)
+- ✅ Navigation + chat wiring so any listing card or chat reference opens the same detail route with cached data
+- ✅ Consolidated Supabase setup (`docs/setup_complete.sql`) and seed data with favorites, notifications, comment replies/likes, device tokens, and cursor pagination helpers
+- ✅ Removed legacy per-feature SQL patch files; documentation now explains push notification credential needs (Expo project ID + Apple/FCM)
+
+### Important Files
+
+- `src/screens/listings/ListingDetailScreen.tsx`
+- `src/screens/app/DashboardScreen.tsx`, `src/screens/profile/*`, `App.js`
+- `src/screens/messages/ChatScreen.tsx`, `src/utils/chatHelpers.ts`
+- `docs/setup_complete.sql`, `docs/seed_data.sql`
+
+### Notes
+
+- Owner actions invalidate caches so cards update instantly across tabs
+- Single detail route ensures consistent listing context from cards or chat references
+- Consolidated SQL lets new environments run `setup_complete.sql` once; `seed_data.sql` now exercises all new tables
+
 ## Last Updated
 
-**Date**: Day 6 - Authentication & Security Fixes  
-**Status**: Authentication system secured with proper logout behavior and email link-based password reset. Deep linking fully functional for password recovery flow.
+**Date**: Day 8 - Listing Detail & Backend Cleanup  
+**Status**: Mobile screens updated with the new detail experience; Supabase schema/seed docs consolidated for easier onboarding; push notification requirements documented.
