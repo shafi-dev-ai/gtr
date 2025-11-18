@@ -8,6 +8,7 @@ export interface SearchFilters {
   yearMax?: number;
   priceMin?: number;
   priceMax?: number;
+  country?: string;
   city?: string;
   state?: string;
   condition?: string;
@@ -106,6 +107,9 @@ export const searchService = {
     }
 
     // Location filters
+    if (filters.country) {
+      query = query.eq('country', filters.country);
+    }
     if (filters.city) {
       query = query.ilike('city', `%${filters.city}%`);
     }
@@ -135,4 +139,3 @@ export const searchService = {
     return data || [];
   },
 };
-

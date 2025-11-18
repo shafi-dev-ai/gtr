@@ -85,6 +85,51 @@ export const STATES_BY_COUNTRY: Record<string, State[]> = {
   // ],
 };
 
+export interface CitySuggestion {
+  state: string;
+  name: string;
+}
+
+export const CITY_SUGGESTIONS_US: CitySuggestion[] = [
+  { state: 'AL', name: 'Birmingham' },
+  { state: 'AK', name: 'Anchorage' },
+  { state: 'AZ', name: 'Phoenix' },
+  { state: 'AZ', name: 'Scottsdale' },
+  { state: 'CA', name: 'Los Angeles' },
+  { state: 'CA', name: 'San Diego' },
+  { state: 'CA', name: 'San Francisco' },
+  { state: 'CA', name: 'San Jose' },
+  { state: 'CO', name: 'Denver' },
+  { state: 'CT', name: 'Hartford' },
+  { state: 'DC', name: 'Washington' },
+  { state: 'FL', name: 'Miami' },
+  { state: 'FL', name: 'Orlando' },
+  { state: 'FL', name: 'Tampa' },
+  { state: 'GA', name: 'Atlanta' },
+  { state: 'IL', name: 'Chicago' },
+  { state: 'MA', name: 'Boston' },
+  { state: 'MI', name: 'Detroit' },
+  { state: 'MN', name: 'Minneapolis' },
+  { state: 'MO', name: 'St. Louis' },
+  { state: 'NC', name: 'Charlotte' },
+  { state: 'NC', name: 'Raleigh' },
+  { state: 'NJ', name: 'Newark' },
+  { state: 'NV', name: 'Las Vegas' },
+  { state: 'NY', name: 'New York' },
+  { state: 'NY', name: 'Buffalo' },
+  { state: 'OH', name: 'Columbus' },
+  { state: 'OR', name: 'Portland' },
+  { state: 'PA', name: 'Philadelphia' },
+  { state: 'PA', name: 'Pittsburgh' },
+  { state: 'TN', name: 'Nashville' },
+  { state: 'TX', name: 'Austin' },
+  { state: 'TX', name: 'Dallas' },
+  { state: 'TX', name: 'Houston' },
+  { state: 'UT', name: 'Salt Lake City' },
+  { state: 'WA', name: 'Seattle' },
+  { state: 'WI', name: 'Milwaukee' },
+];
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -178,3 +223,20 @@ export const isValidState = (countryCode: string, stateCode: string): boolean =>
   return states.some(s => s.code === stateCode);
 };
 
+export const getCitySuggestions = (
+  countryCode: string,
+  stateCode?: string,
+  query?: string
+): CitySuggestion[] => {
+  if (countryCode !== 'US') return [];
+  let suggestions = CITY_SUGGESTIONS_US;
+  if (stateCode) {
+    suggestions = suggestions.filter(city => city.state === stateCode);
+  }
+  if (query && query.trim()) {
+    suggestions = suggestions.filter(city =>
+      city.name.toLowerCase().includes(query.trim().toLowerCase())
+    );
+  }
+  return suggestions.slice(0, 8);
+};

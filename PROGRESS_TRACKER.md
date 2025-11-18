@@ -170,6 +170,7 @@ React Native app for GT-R marketplace with Supabase backend. Features: listings,
   - Live message unread counter in header
   - “Chat now” buttons on Home, Marketplace, and Favorites now open chats with contextual listing info
 - ✅ Notification fixes:
+
   - Proper badge updates, cache invalidation, badge count persistence across app states
 
 ### Important Files
@@ -179,14 +180,17 @@ React Native app for GT-R marketplace with Supabase backend. Features: listings,
 - `src/utils/chatHelpers.ts`
 - `src/components/common/DashboardHeader.tsx`
 - `src/components/home/ListingsSection.tsx`, `src/components/shared/ListingCard*.tsx`
+- `src/utils/locationData.ts`
+- `src/components/marketplace/FilterModal.tsx`
+- `src/services/search.ts`
 
 ### Notes
 
 - Listing references are stored as structured system messages (`__listing_ref__` prefix) so both users see the same card.
 - Inbox previews strip system payloads and show a friendly “Listing reference” summary.
 - Realtime subscriptions keep both notifications and messages in sync without manual refreshes.
-
 ---
+
 ## Current State
 
 ### Working Features
@@ -398,6 +402,27 @@ npm start
 - Fixed password reset screen not showing (navigation timing and stack detection)
 - Fixed recovery session being treated as authenticated (recovery mode flag)
 - Removed OTP-based password reset flow (replaced with email link)
+
+
+## Day 7 - Marketplace Location Filters
+
+### Completed
+
+- ✅ Structured location filtering in Marketplace:
+  - Country selector with searchable dropdown
+  - State/region selector scoped to chosen country
+  - City field with inline suggestions (typeahead) filtered by state
+- ✅ Extended search filters/service to support structured `country`/`state`/`city` filters for future create-listing integration
+
+### Important Files
+
+- `src/components/marketplace/FilterModal.tsx`
+- `src/utils/locationData.ts`
+- `src/services/search.ts`
+
+### Notes
+
+- Marketplace location filters now use the same dataset we’ll reuse in the listing form, keeping user input consistent across the app.
 
 ---
 

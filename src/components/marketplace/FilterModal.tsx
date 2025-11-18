@@ -2,6 +2,13 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SearchFilters } from '../../services/search';
+import {
+  getCountries,
+  getCountryName,
+  getStatesByCountry,
+  getStateName,
+  getCitySuggestions,
+} from '../../utils/locationData';
 
 interface FilterModalProps {
   visible: boolean;
@@ -28,6 +35,11 @@ export const FilterModal: React.FC<FilterModalProps> = ({
   initialFilters = {},
 }) => {
   const [filters, setFilters] = useState<SearchFilters>(initialFilters);
+  const [showCountryOptions, setShowCountryOptions] = useState(false);
+  const [showStateOptions, setShowStateOptions] = useState(false);
+  const [countrySearch, setCountrySearch] = useState('');
+  const [stateSearch, setStateSearch] = useState('');
+  const [cityQuery, setCityQuery] = useState(initialFilters.city || '');
 
   const handleApply = () => {
     onApply(filters);
@@ -36,6 +48,11 @@ export const FilterModal: React.FC<FilterModalProps> = ({
 
   const handleReset = () => {
     setFilters({});
+    setCityQuery('');
+    setCountrySearch('');
+    setStateSearch('');
+    setShowCountryOptions(false);
+    setShowStateOptions(false);
     onApply({});
     onClose();
   };
@@ -58,6 +75,170 @@ export const FilterModal: React.FC<FilterModalProps> = ({
           </View>
 
           <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+            {/* Location */}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterTitle}>Country</Text>
+              <TouchableOpacity
+                style={styles.selector}
+                onPress={() => setShowCountryOptions(!showCountryOptions)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.selectorText}>
+                  {filters.country
+                    ? getCountryName(filters.country) || filters.country
+                    : 'Select country'}
+                </Text>
+                <Ionicons
+                  name={showCountryOptions ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color="#FFFFFF"
+                />
+              </TouchableOpacity>
+              {showCountryOptions && (
+                <View style={styles.dropdown}>
+                  <TextInput
+                    style={[styles.input, styles.dropdownSearch]}
+                    placeholder="Search country"
+                    placeholderTextColor="#808080"
+                    value={countrySearch}
+                    onChangeText={setCountrySearch}
+                  />
+                  <ScrollView style={styles.dropdownList}>
+                    <TouchableOpacity
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        setFilters({ ...filters, country: undefined, state: undefined, city: undefined });
+                        setShowCountryOptions(false);
+                      }}
+                    >
+                      <Text style={styles.dropdownItemText}>Any country</Text>
+                    </TouchableOpacity>
+                    {getCountries()
+                      .filter((country) =>
+                        country.name.toLowerCase().includes(countrySearch.toLowerCase())
+                      )
+                      .map((country) => (
+                        <TouchableOpacity
+                          key={country.code}
+                          style={styles.dropdownItem}
+                          onPress={() => {
+                            setFilters({
+                              ...filters,
+                              country: country.code,
+                              state: undefined,
+                              city: undefined,
+                            });
+                            setShowCountryOptions(false);
+                            setStateSearch('');
+                          }}
+                        >
+                          <Text style={styles.dropdownItemText}>{country.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                  </ScrollView>
+                </View>
+              )}
+
+              <Text style={[styles.filterTitle, { marginTop: 24 }]}>State / Region</Text>
+              <TouchableOpacity
+                style={[
+                  styles.selector,
+                  !filters.country && styles.selectorDisabled,
+                ]}
+                onPress={() => filters.country && setShowStateOptions(!showStateOptions)}
+                activeOpacity={filters.country ? 0.8 : 1}
+              >
+                <Text style={styles.selectorText}>
+                  {filters.state && filters.country
+                    ? getStateName(filters.country, filters.state) || filters.state
+                    : filters.country
+                    ? 'Select state'
+                    : 'Select country first'}
+                </Text>
+                <Ionicons
+                  name={showStateOptions ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color="#FFFFFF"
+                />
+              </TouchableOpacity>
+              {showStateOptions && filters.country && (
+                <View style={styles.dropdown}>
+                  <TextInput
+                    style={[styles.input, styles.dropdownSearch]}
+                    placeholder="Search state"
+                    placeholderTextColor="#808080"
+                    value={stateSearch}
+                    onChangeText={setStateSearch}
+                  />
+                  <ScrollView style={styles.dropdownList}>
+                    <TouchableOpacity
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        setFilters({ ...filters, state: undefined, city: undefined });
+                        setShowStateOptions(false);
+                      }}
+                    >
+                      <Text style={styles.dropdownItemText}>Any state</Text>
+                    </TouchableOpacity>
+                    {getStatesByCountry(filters.country)
+                      .filter((state) =>
+                        state.name.toLowerCase().includes(stateSearch.toLowerCase())
+                      )
+                      .map((state) => (
+                        <TouchableOpacity
+                          key={state.code}
+                          style={styles.dropdownItem}
+                          onPress={() => {
+                            setFilters({
+                              ...filters,
+                              state: state.code,
+                              city: undefined,
+                            });
+                            setShowStateOptions(false);
+                            setStateSearch('');
+                          }}
+                        >
+                          <Text style={styles.dropdownItemText}>{state.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                  </ScrollView>
+                </View>
+              )}
+
+              <Text style={[styles.filterTitle, { marginTop: 24 }]}>City</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Start typing to search"
+                placeholderTextColor="#808080"
+                value={cityQuery}
+                onChangeText={(text) => {
+                  setCityQuery(text);
+                  setFilters({ ...filters, city: text ? text : undefined });
+                }}
+                editable={!!filters.state}
+              />
+              {filters.state && cityQuery.length >= 1 && (
+                <View style={styles.suggestionBox}>
+                  {getCitySuggestions(filters.country || 'US', filters.state, cityQuery).map(
+                    (city) => (
+                      <TouchableOpacity
+                        key={`${city.state}-${city.name}`}
+                        style={styles.suggestionItem}
+                        onPress={() => {
+                          setCityQuery(city.name);
+                          setFilters({ ...filters, city: city.name });
+                        }}
+                      >
+                        <Text style={styles.suggestionText}>
+                          {city.name}, {getStateName('US', city.state) || city.state}
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  )}
+                </View>
+              )}
+            </View>
+
             {/* Model Filter */}
             <View style={styles.filterSection}>
               <Text style={styles.filterTitle}>Model</Text>
@@ -302,6 +483,26 @@ const styles = StyleSheet.create({
   chipTextActive: {
     color: '#FFFFFF',
   },
+  selector: {
+    backgroundColor: '#181920',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#333333',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  selectorDisabled: {
+    opacity: 0.4,
+  },
+  selectorText: {
+    fontSize: 15,
+    fontFamily: 'Rubik',
+    fontWeight: '500',
+    color: '#FFFFFF',
+  },
   rangeContainer: {
     flexDirection: 'row',
     gap: 12,
@@ -327,6 +528,51 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#333333',
+  },
+  dropdown: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#333333',
+    backgroundColor: '#16171F',
+  },
+  dropdownSearch: {
+    borderWidth: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2A2D3A',
+    borderRadius: 0,
+  },
+  dropdownList: {
+    maxHeight: 200,
+  },
+  dropdownItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2A2D3A',
+  },
+  dropdownItemText: {
+    fontSize: 15,
+    fontFamily: 'Rubik',
+    color: '#FFFFFF',
+  },
+  suggestionBox: {
+    marginTop: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2A2D3A',
+    backgroundColor: '#16171F',
+  },
+  suggestionItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1F212B',
+  },
+  suggestionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Rubik',
   },
   footer: {
     flexDirection: 'row',
@@ -367,4 +613,3 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
-
