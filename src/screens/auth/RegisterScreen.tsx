@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { authService } from '../../services/auth';
 
@@ -33,6 +34,16 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
   const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
   const [termsError, setTermsError] = useState<string | null>(null);
   const { setIsAuthenticated } = useAuth();
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showListener = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hideListener = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => {
+      showListener.remove();
+      hideListener.remove();
+    };
+  }, []);
 
   const handleSignUp = async () => {
     // Clear previous errors
@@ -125,17 +136,19 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        showsHorizontalScrollIndicator={false}
-      >
-        <View style={styles.content}>
+    <SafeAreaView edges={['top']} style={styles.safeArea}>
+      <View style={styles.container}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[
+            styles.scrollContent,
+            keyboardVisible ? styles.keyboardPaddingExpanded : styles.keyboardPaddingCollapsed,
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
+        >
+          <View style={styles.content}>
           <Text style={styles.heading}>Register</Text>
           <Text style={styles.subtitle}>Create new account for better service</Text>
 
@@ -308,25 +321,39 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
               <Text style={styles.appleButtonText}>Continue with Apple</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          </View>
+        </ScrollView>
+      </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#181920',
+  },
   container: {
+    flex: 1,
+    backgroundColor: '#181920',
+  },
+  scrollView: {
     flex: 1,
     backgroundColor: '#181920',
   },
   scrollContent: {
     flexGrow: 1,
   },
+  keyboardPaddingCollapsed: {
+    paddingBottom: 24,
+  },
+  keyboardPaddingExpanded: {
+    paddingBottom: Platform.OS === 'ios' ? 320 : 340,
+  },
   content: {
-    flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 40,
+    paddingTop: 24,
+    paddingBottom: 10,
   },
   heading: {
     fontSize: 24,
@@ -514,4 +541,3 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
-

@@ -16,7 +16,6 @@ export interface State {
 // Countries list (extendable)
 export const COUNTRIES: Country[] = [
   { code: 'US', name: 'United States' },
-  // Add more countries as needed:
   // { code: 'CA', name: 'Canada' },
   // { code: 'GB', name: 'United Kingdom' },
   // { code: 'AU', name: 'Australia' },
@@ -77,11 +76,36 @@ export const STATES_BY_COUNTRY: Record<string, State[]> = {
     { code: 'WY', name: 'Wyoming' },
     { code: 'DC', name: 'District of Columbia' },
   ],
-  // Add more countries as needed:
   // CA: [
   //   { code: 'AB', name: 'Alberta' },
   //   { code: 'BC', name: 'British Columbia' },
-  //   // ... more provinces
+  //   { code: 'MB', name: 'Manitoba' },
+  //   { code: 'NB', name: 'New Brunswick' },
+  //   { code: 'NL', name: 'Newfoundland and Labrador' },
+  //   { code: 'NS', name: 'Nova Scotia' },
+  //   { code: 'NT', name: 'Northwest Territories' },
+  //   { code: 'NU', name: 'Nunavut' },
+  //   { code: 'ON', name: 'Ontario' },
+  //   { code: 'PE', name: 'Prince Edward Island' },
+  //   { code: 'QC', name: 'Quebec' },
+  //   { code: 'SK', name: 'Saskatchewan' },
+  //   { code: 'YT', name: 'Yukon' },
+  // ],
+  // GB: [
+  //   { code: 'ENG', name: 'England' },
+  //   { code: 'SCT', name: 'Scotland' },
+  //   { code: 'WLS', name: 'Wales' },
+  //   { code: 'NIR', name: 'Northern Ireland' },
+  // ],
+  // AU: [
+  //   { code: 'ACT', name: 'Australian Capital Territory' },
+  //   { code: 'NSW', name: 'New South Wales' },
+  //   { code: 'NT', name: 'Northern Territory' },
+  //   { code: 'QLD', name: 'Queensland' },
+  //   { code: 'SA', name: 'South Australia' },
+  //   { code: 'TAS', name: 'Tasmania' },
+  //   { code: 'VIC', name: 'Victoria' },
+  //   { code: 'WA', name: 'Western Australia' },
   // ],
 };
 

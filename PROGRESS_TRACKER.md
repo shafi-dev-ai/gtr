@@ -441,7 +441,32 @@ npm start
 - Marketplace location filters reuse the same dataset as the listing form, keeping input consistent across the app
 - Create listing workflow now shares helpers/services with marketplace filtering so data stays normalized
 
+---
+
+## Day 9 - Auth UX & Location Filters Stabilization
+
+### Completed
+
+- ✅ Fixed auth screen keyboard/safe-area glitches: replaced `KeyboardAvoidingView` padding with custom scroll padding, added SafeArea top-only treatment, ensured CTA rows stay aligned, and tightened header spacing to remove the white band after keyboard dismiss.
+- ✅ Made “Create a new one” link in Login tappable without affecting the surrounding copy, matching expected UX.
+- ✅ Expanded shared location dataset with Canada, UK, and Australia states/provinces so both Create Listing and Marketplace filters have real options beyond the U.S.
+- ✅ Marketplace `FilterModal` polish: search filtering now memoized, dropdowns allow nested scrolling, typeahead suggestions close after selection, and the city picker no longer needs double taps.
+- ✅ Create Listing selection modals now support nested scroll + keyboard taps to prevent dropdowns from “sticking” when embedded in other scroll views.
+
+### Important Files
+
+- `src/screens/auth/LoginScreen.tsx`, `src/screens/auth/RegisterScreen.tsx`
+- `src/components/marketplace/FilterModal.tsx`
+- `src/screens/listings/CreateListingScreen.tsx`
+- `src/utils/locationData.ts`, `src/constants/listingOptions.ts`
+
+### Notes
+
+- Auth screens now rely on explicit scroll padding + SafeAreaView, so we can tweak keyboard spacing without battling `KeyboardAvoidingView`.
+- Location helpers remain the single source of truth for both marketplace filters and listing creation; future geo additions only update one file.
+- Filter modal improvements make the dropdown usable on long lists and mobile keyboards, aligning it with the Create Listing modal behavior.
+
 ## Last Updated
 
-**Date**: Day 7 + 8 - Listing Detail, Create Listing, & Backend Cleanup  
-**Status**: Mobile screens cover detail + creation flows; Supabase schema/seed docs consolidated for easier onboarding; push notification requirements documented; marketplace filters + listing form now share the same structured data path.
+**Date**: Day 9 - Auth UX & Location Filters Stabilization  
+**Status**: Listing detail + creation work is complete, auth flows feel stable on keyboard open/close, and both marketplace filters + listing forms share the expanded location dataset with polished dropdown UX.

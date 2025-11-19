@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { authService } from '../../services/auth';
 
@@ -28,6 +29,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const { setIsAuthenticated } = useAuth();
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showListener = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hideListener = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => {
+      showListener.remove();
+      hideListener.remove();
+    };
+  }, []);
 
   const handleLogin = async () => {
     // Clear previous errors
@@ -179,17 +190,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        showsHorizontalScrollIndicator={false}
-      >
-        <View style={styles.content}>
+    <SafeAreaView edges={['top']} style={styles.safeArea}>
+      <View style={styles.container}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[
+            styles.scrollContent,
+            keyboardVisible ? styles.keyboardPaddingExpanded : styles.keyboardPaddingCollapsed,
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
+        >
+          <View style={styles.content}>
           <Text style={styles.heading}>Login</Text>
           <Text style={styles.subtitle}>Welcome back!</Text>
 
@@ -280,11 +293,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={handleSignUp} style={styles.signUpContainer}>
-              <Text style={styles.signUpText}>
-                Don't have an account? <Text style={styles.signUpLink}>Create a new one</Text>
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.signUpContainer}>
+              <Text style={styles.signUpText}>Don't have an account? </Text>
+              <TouchableOpacity onPress={handleSignUp}>
+                <Text style={styles.signUpLink}>Create a new one</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.socialSection}>
@@ -322,25 +336,39 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               <Text style={styles.appleButtonText}>Continue with Apple</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          </View>
+        </ScrollView>
+      </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#181920',
+  },
   container: {
+    flex: 1,
+    backgroundColor: '#181920',
+  },
+  scrollView: {
     flex: 1,
     backgroundColor: '#181920',
   },
   scrollContent: {
     flexGrow: 1,
   },
+  keyboardPaddingCollapsed: {
+    paddingBottom: 24,
+  },
+  keyboardPaddingExpanded: {
+    paddingBottom: Platform.OS === 'ios' ? 320 : 340,
+  },
   content: {
-    flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 40,
+    paddingTop: 24,
+    paddingBottom: 10,
   },
   heading: {
     fontSize: 24,
@@ -468,13 +496,16 @@ const styles = StyleSheet.create({
   },
   signUpContainer: {
     marginTop: 16,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   signUpText: {
     fontSize: 16,
     fontFamily: 'Rubik',
     fontWeight: '400',
     color: '#FFFFFF',
+    marginRight: 4,
   },
   signUpLink: {
     fontSize: 16,
@@ -549,4 +580,3 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
-

@@ -107,7 +107,12 @@ const SelectionModal: React.FC<{
     <View style={styles.modalBackdrop}>
       <View style={styles.modalContent}>
         <Text style={styles.modalTitle}>{title}</Text>
-        <ScrollView style={styles.modalList}>
+        <ScrollView
+          style={styles.modalList}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           {options.map((option) => (
             <TouchableOpacity
               key={option.value}

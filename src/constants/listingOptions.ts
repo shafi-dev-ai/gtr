@@ -15,14 +15,9 @@ export const GTR_MODEL_OPTIONS: ListingModelOption[] = [
   { label: 'GT-R R34 (1999-2002)', value: 'Nissan GT-R R34' },
   { label: 'GT-R R33 (1995-1998)', value: 'Nissan GT-R R33' },
   { label: 'GT-R R32 (1989-1994)', value: 'Nissan GT-R R32' },
-  
-  
-  
-  
-  
 ];
 
-export const LISTING_CONDITION_OPTIONS = ['Poor', 'Average', 'Good', 'Excellent'];
+export const LISTING_CONDITION_OPTIONS = ['Fair', 'Good', 'Very Good', 'Excellent'];
 
 export const COLOR_PRESETS: ListingColorOption[] = [
   { name: 'Jet Black Pearl', hex: '#0C0D11' },

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SearchFilters } from '../../services/search';
@@ -40,6 +40,29 @@ export const FilterModal: React.FC<FilterModalProps> = ({
   const [countrySearch, setCountrySearch] = useState('');
   const [stateSearch, setStateSearch] = useState('');
   const [cityQuery, setCityQuery] = useState(initialFilters.city || '');
+  const [showCitySuggestions, setShowCitySuggestions] = useState(false);
+
+  const filteredCountries = useMemo(() => {
+    const query = countrySearch.trim().toLowerCase();
+    return getCountries().filter((country) =>
+      country.name.toLowerCase().includes(query)
+    );
+  }, [countrySearch]);
+
+  const filteredStates = useMemo(() => {
+    if (!filters.country) return [];
+    const query = stateSearch.trim().toLowerCase();
+    return getStatesByCountry(filters.country).filter((state) =>
+      state.name.toLowerCase().includes(query)
+    );
+  }, [filters.country, stateSearch]);
+
+  const citySuggestions = useMemo(() => {
+    if (!filters.state || !showCitySuggestions || cityQuery.length === 0) {
+      return [];
+    }
+    return getCitySuggestions(filters.country || 'US', filters.state, cityQuery);
+  }, [filters.country, filters.state, cityQuery, showCitySuggestions]);
 
   const handleApply = () => {
     onApply(filters);
@@ -74,7 +97,11 @@ export const FilterModal: React.FC<FilterModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.scrollView}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
             {/* Location */}
             <View style={styles.filterSection}>
               <Text style={styles.filterTitle}>Country</Text>
@@ -103,7 +130,12 @@ export const FilterModal: React.FC<FilterModalProps> = ({
                     value={countrySearch}
                     onChangeText={setCountrySearch}
                   />
-                  <ScrollView style={styles.dropdownList}>
+                  <ScrollView
+                    style={styles.dropdownList}
+                    nestedScrollEnabled
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                  >
                     <TouchableOpacity
                       style={styles.dropdownItem}
                       onPress={() => {
@@ -113,14 +145,10 @@ export const FilterModal: React.FC<FilterModalProps> = ({
                     >
                       <Text style={styles.dropdownItemText}>Any country</Text>
                     </TouchableOpacity>
-                    {getCountries()
-                      .filter((country) =>
-                        country.name.toLowerCase().includes(countrySearch.toLowerCase())
-                      )
-                      .map((country) => (
-                        <TouchableOpacity
-                          key={country.code}
-                          style={styles.dropdownItem}
+                    {filteredCountries.map((country) => (
+                      <TouchableOpacity
+                        key={country.code}
+                        style={styles.dropdownItem}
                           onPress={() => {
                             setFilters({
                               ...filters,
@@ -170,7 +198,12 @@ export const FilterModal: React.FC<FilterModalProps> = ({
                     value={stateSearch}
                     onChangeText={setStateSearch}
                   />
-                  <ScrollView style={styles.dropdownList}>
+                  <ScrollView
+                    style={styles.dropdownList}
+                    nestedScrollEnabled
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                  >
                     <TouchableOpacity
                       style={styles.dropdownItem}
                       onPress={() => {
@@ -180,14 +213,10 @@ export const FilterModal: React.FC<FilterModalProps> = ({
                     >
                       <Text style={styles.dropdownItemText}>Any state</Text>
                     </TouchableOpacity>
-                    {getStatesByCountry(filters.country)
-                      .filter((state) =>
-                        state.name.toLowerCase().includes(stateSearch.toLowerCase())
-                      )
-                      .map((state) => (
-                        <TouchableOpacity
-                          key={state.code}
-                          style={styles.dropdownItem}
+                    {filteredStates.map((state) => (
+                      <TouchableOpacity
+                        key={state.code}
+                        style={styles.dropdownItem}
                           onPress={() => {
                             setFilters({
                               ...filters,
@@ -213,28 +242,31 @@ export const FilterModal: React.FC<FilterModalProps> = ({
                 value={cityQuery}
                 onChangeText={(text) => {
                   setCityQuery(text);
+                  setShowCitySuggestions(Boolean(text.trim()) && !!filters.state);
                   setFilters({ ...filters, city: text ? text : undefined });
                 }}
+                onFocus={() => filters.state && setShowCitySuggestions(cityQuery.length > 0)}
+                onBlur={() => setShowCitySuggestions(false)}
                 editable={!!filters.state}
               />
-              {filters.state && cityQuery.length >= 1 && (
+              {filters.state && showCitySuggestions && citySuggestions.length > 0 && (
                 <View style={styles.suggestionBox}>
-                  {getCitySuggestions(filters.country || 'US', filters.state, cityQuery).map(
-                    (city) => (
-                      <TouchableOpacity
-                        key={`${city.state}-${city.name}`}
-                        style={styles.suggestionItem}
-                        onPress={() => {
-                          setCityQuery(city.name);
-                          setFilters({ ...filters, city: city.name });
-                        }}
-                      >
-                        <Text style={styles.suggestionText}>
-                          {city.name}, {getStateName('US', city.state) || city.state}
-                        </Text>
-                      </TouchableOpacity>
-                    )
-                  )}
+                  {citySuggestions.map((city) => (
+                    <TouchableOpacity
+                      key={`${city.state}-${city.name}`}
+                      style={styles.suggestionItem}
+                      onPress={() => {
+                        setCityQuery(city.name);
+                        setFilters({ ...filters, city: city.name });
+                        setShowCitySuggestions(false);
+                      }}
+                    >
+                      <Text style={styles.suggestionText}>
+                        {city.name},{' '}
+                        {getStateName(filters.country || 'US', city.state) || city.state}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
               )}
             </View>
