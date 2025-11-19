@@ -654,6 +654,192 @@ ON storage.objects FOR SELECT
 TO public
 USING (bucket_id = 'avatars');
 
+-- Storage Bucket Policies for Listing Images
+DROP POLICY IF EXISTS "Owners can upload listing images" ON storage.objects;
+DROP POLICY IF EXISTS "Owners can update listing images" ON storage.objects;
+DROP POLICY IF EXISTS "Owners can delete listing images" ON storage.objects;
+DROP POLICY IF EXISTS "Public can view listing images" ON storage.objects;
+
+CREATE POLICY "Owners can upload listing images"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (
+  bucket_id = 'listing-images'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Owners can update listing images"
+ON storage.objects FOR UPDATE TO authenticated
+USING (
+  bucket_id = 'listing-images'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Owners can delete listing images"
+ON storage.objects FOR DELETE TO authenticated
+USING (
+  bucket_id = 'listing-images'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Public can view listing images"
+ON storage.objects FOR SELECT TO public
+USING (bucket_id = 'listing-images');
+
+-- Storage Bucket Policies for Forum Images
+DROP POLICY IF EXISTS "Owners can upload forum images" ON storage.objects;
+DROP POLICY IF EXISTS "Owners can update forum images" ON storage.objects;
+DROP POLICY IF EXISTS "Owners can delete forum images" ON storage.objects;
+DROP POLICY IF EXISTS "Public can view forum images" ON storage.objects;
+
+CREATE POLICY "Owners can upload forum images"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (
+  bucket_id = 'forum-images'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Owners can update forum images"
+ON storage.objects FOR UPDATE TO authenticated
+USING (
+  bucket_id = 'forum-images'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Owners can delete forum images"
+ON storage.objects FOR DELETE TO authenticated
+USING (
+  bucket_id = 'forum-images'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Public can view forum images"
+ON storage.objects FOR SELECT TO public
+USING (bucket_id = 'forum-images');
+
+-- Storage Bucket Policies for Garage Images
+DROP POLICY IF EXISTS "Owners can upload garage images" ON storage.objects;
+DROP POLICY IF EXISTS "Owners can update garage images" ON storage.objects;
+DROP POLICY IF EXISTS "Owners can delete garage images" ON storage.objects;
+DROP POLICY IF EXISTS "Public can view garage images" ON storage.objects;
+
+CREATE POLICY "Owners can upload garage images"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (
+  bucket_id = 'garage-images'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Owners can update garage images"
+ON storage.objects FOR UPDATE TO authenticated
+USING (
+  bucket_id = 'garage-images'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Owners can delete garage images"
+ON storage.objects FOR DELETE TO authenticated
+USING (
+  bucket_id = 'garage-images'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Public can view garage images"
+ON storage.objects FOR SELECT TO public
+USING (bucket_id = 'garage-images');
+
+-- Storage Bucket Policies for Event Images
+DROP POLICY IF EXISTS "Owners can upload event images" ON storage.objects;
+DROP POLICY IF EXISTS "Owners can update event images" ON storage.objects;
+DROP POLICY IF EXISTS "Owners can delete event images" ON storage.objects;
+DROP POLICY IF EXISTS "Public can view event images" ON storage.objects;
+
+CREATE POLICY "Owners can upload event images"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (
+  bucket_id = 'event-images'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Owners can update event images"
+ON storage.objects FOR UPDATE TO authenticated
+USING (
+  bucket_id = 'event-images'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Owners can delete event images"
+ON storage.objects FOR DELETE TO authenticated
+USING (
+  bucket_id = 'event-images'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Public can view event images"
+ON storage.objects FOR SELECT TO public
+USING (bucket_id = 'event-images');
+
+-- Storage Bucket Policies for Message Images
+DROP POLICY IF EXISTS "Owners can upload message images" ON storage.objects;
+DROP POLICY IF EXISTS "Owners can update message images" ON storage.objects;
+DROP POLICY IF EXISTS "Owners can delete message images" ON storage.objects;
+DROP POLICY IF EXISTS "Public can view message images" ON storage.objects;
+
+CREATE POLICY "Owners can upload message images"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (
+  bucket_id = 'message-images'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Owners can update message images"
+ON storage.objects FOR UPDATE TO authenticated
+USING (
+  bucket_id = 'message-images'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Owners can delete message images"
+ON storage.objects FOR DELETE TO authenticated
+USING (
+  bucket_id = 'message-images'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Public can view message images"
+ON storage.objects FOR SELECT TO public
+USING (bucket_id = 'message-images');
+
+-- Storage Bucket Policies for Community Media
+DROP POLICY IF EXISTS "Owners can upload community media" ON storage.objects;
+DROP POLICY IF EXISTS "Owners can update community media" ON storage.objects;
+DROP POLICY IF EXISTS "Owners can delete community media" ON storage.objects;
+DROP POLICY IF EXISTS "Public can view community media" ON storage.objects;
+
+CREATE POLICY "Owners can upload community media"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (
+  bucket_id = 'community-media'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Owners can update community media"
+ON storage.objects FOR UPDATE TO authenticated
+USING (
+  bucket_id = 'community-media'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Owners can delete community media"
+ON storage.objects FOR DELETE TO authenticated
+USING (
+  bucket_id = 'community-media'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+CREATE POLICY "Public can view community media"
+ON storage.objects FOR SELECT TO public
+USING (bucket_id = 'community-media');
+
 -- ============================================================================
 -- STEP 4: CREATE FUNCTIONS
 -- ============================================================================

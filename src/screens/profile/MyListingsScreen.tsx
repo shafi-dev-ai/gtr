@@ -102,10 +102,9 @@ export const MyListingsScreen: React.FC = () => {
   );
 
   const handleEditListing = (listing: ListingWithImages) => {
-    Alert.alert(
-      'Edit listing',
-      'Editing listings will be available soon. For now, please contact support to make changes.'
-    );
+    navigation.navigate('CreateListing', {
+      listingToEdit: listing,
+    });
   };
 
   return (

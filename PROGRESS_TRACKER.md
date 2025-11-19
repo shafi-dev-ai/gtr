@@ -404,29 +404,7 @@ npm start
 - Removed OTP-based password reset flow (replaced with email link)
 
 
-## Day 7 - Marketplace Location Filters
-
-### Completed
-
-- ✅ Structured location filtering in Marketplace:
-  - Country selector with searchable dropdown
-  - State/region selector scoped to chosen country
-  - City field with inline suggestions (typeahead) filtered by state
-- ✅ Extended search filters/service to support structured `country`/`state`/`city` filters for future create-listing integration
-
-### Important Files
-
-- `src/components/marketplace/FilterModal.tsx`
-- `src/utils/locationData.ts`
-- `src/services/search.ts`
-
-### Notes
-
-- Marketplace location filters now use the same dataset we’ll reuse in the listing form, keeping user input consistent across the app.
-
----
-
-## Day 8 - Listing Detail Experience & Database Consolidation
+## Day 7 + 8 - Listing Detail Experience & Database Consolidation
 
 ### Completed
 
@@ -434,6 +412,14 @@ npm start
 - ✅ Navigation + chat wiring so any listing card or chat reference opens the same detail route with cached data
 - ✅ Consolidated Supabase setup (`docs/setup_complete.sql`) and seed data with favorites, notifications, comment replies/likes, device tokens, and cursor pagination helpers
 - ✅ Removed legacy per-feature SQL patch files; documentation now explains push notification credential needs (Expo project ID + Apple/FCM)
+- ✅ Structured location filtering in Marketplace:
+  - Country selector with searchable dropdown
+  - State/region selector scoped to chosen country
+  - City field with inline suggestions (typeahead) filtered by state
+- ✅ Extended search filters/service to support structured `country`/`state`/`city` filters for create-listing integration
+- ✅ Create listing screen foundation with validation + Supabase upload for title/price/model/description/year/condition/transmission/color/location/etc.
+- ✅ Photo picker grid with multi-upload, size limits, and removal controls
+- ✅ Keyboard-aware layout so CTAs stay accessible when typing
 
 ### Important Files
 
@@ -441,14 +427,21 @@ npm start
 - `src/screens/app/DashboardScreen.tsx`, `src/screens/profile/*`, `App.js`
 - `src/screens/messages/ChatScreen.tsx`, `src/utils/chatHelpers.ts`
 - `docs/setup_complete.sql`, `docs/seed_data.sql`
+- `src/components/marketplace/FilterModal.tsx`
+- `src/utils/locationData.ts`
+- `src/services/search.ts`
+- `src/screens/listings/CreateListingScreen.tsx`
+- `src/constants/listingOptions.ts`
 
 ### Notes
 
 - Owner actions invalidate caches so cards update instantly across tabs
 - Single detail route ensures consistent listing context from cards or chat references
 - Consolidated SQL lets new environments run `setup_complete.sql` once; `seed_data.sql` now exercises all new tables
+- Marketplace location filters reuse the same dataset as the listing form, keeping input consistent across the app
+- Create listing workflow now shares helpers/services with marketplace filtering so data stays normalized
 
 ## Last Updated
 
-**Date**: Day 8 - Listing Detail & Backend Cleanup  
-**Status**: Mobile screens updated with the new detail experience; Supabase schema/seed docs consolidated for easier onboarding; push notification requirements documented.
+**Date**: Day 7 + 8 - Listing Detail, Create Listing, & Backend Cleanup  
+**Status**: Mobile screens cover detail + creation flows; Supabase schema/seed docs consolidated for easier onboarding; push notification requirements documented; marketplace filters + listing form now share the same structured data path.

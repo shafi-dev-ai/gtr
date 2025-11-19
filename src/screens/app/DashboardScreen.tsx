@@ -113,8 +113,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
   };
 
   const handleForumSeeMorePress = () => {
-    // Switch to community tab
-    setActiveTab('community');
+    Alert.alert('Community coming soon', 'The community hub is on its way. Stay tuned!');
+  };
+
+  const handleCreateListingPress = () => {
+    navigation?.navigate?.('CreateListing');
   };
 
   const handleRefresh = useCallback(async () => {
@@ -199,11 +202,44 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
         />
       )}
 
+      {activeTab === 'create' && (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.createScrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.createCard}>
+            <View style={styles.createIconContainer}>
+              <Ionicons name="car-sport" size={28} color="#FFFFFF" />
+            </View>
+            <Text style={styles.createTitle}>List your GT-R</Text>
+            <Text style={styles.createSubtitle}>
+              Add photos, pricing, and location in a few steps. Buyers around the world are waiting.
+            </Text>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={handleCreateListingPress}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="add-circle-outline" size={18} color="#181920" />
+              <Text style={styles.primaryButtonText}>Create new listing</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.createTipsCard}>
+            <Text style={styles.createTipsTitle}>Tips</Text>
+            <Text style={styles.createTip}>• Use bright, well-lit photos (max 12, under 10MB each).</Text>
+            <Text style={styles.createTip}>• Include maintenance history and unique upgrades.</Text>
+            <Text style={styles.createTip}>• Double-check location details for accurate search results.</Text>
+          </View>
+        </ScrollView>
+      )}
+
       {activeTab === 'profile' && (
         <ProfileScreen navigation={navigation} />
       )}
 
-      {activeTab !== 'home' && activeTab !== 'marketplace' && activeTab !== 'profile' && (
+      {activeTab !== 'home' && activeTab !== 'marketplace' && activeTab !== 'profile' && activeTab !== 'create' && (
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
@@ -259,5 +295,66 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     color: '#808080',
     textAlign: 'center',
+  },
+  createScrollContent: {
+    flexGrow: 1,
+    padding: 24,
+  },
+  createCard: {
+    backgroundColor: '#1F222A',
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 16,
+  },
+  createIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: 'rgba(220,20,60,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  createTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  createSubtitle: {
+    color: '#C7CAD7',
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  primaryButton: {
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  primaryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#181920',
+  },
+  createTipsCard: {
+    backgroundColor: '#1A1D26',
+    borderRadius: 20,
+    padding: 20,
+  },
+  createTipsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 12,
+  },
+  createTip: {
+    color: '#9CA0B8',
+    fontSize: 14,
+    marginBottom: 6,
   },
 });

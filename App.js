@@ -27,6 +27,7 @@ import { conditionalStorage } from './src/services/sessionStorage';
 import { InboxScreen } from './src/screens/messages/InboxScreen';
 import { ChatScreen } from './src/screens/messages/ChatScreen';
 import { ListingDetailScreen } from './src/screens/listings/ListingDetailScreen';
+import { CreateListingScreen } from './src/screens/listings/CreateListingScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -66,6 +67,7 @@ const AppStack = () => {
       <Stack.Screen name="Inbox" component={InboxScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
       <Stack.Screen name="ListingDetail" component={ListingDetailScreen} />
+      <Stack.Screen name="CreateListing" component={CreateListingScreen} />
     </Stack.Navigator>
   );
 };
