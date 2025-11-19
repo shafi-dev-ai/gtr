@@ -18,6 +18,7 @@ import { ListingWithImages } from '../../types/listing.types';
 import { ListingCardVertical } from '../../components/shared/ListingCardVertical';
 import { useDataFetch } from '../../hooks/useDataFetch';
 import dataManager, { RequestPriority } from '../../services/dataManager';
+import { useDeleteConfirmation } from '../../hooks/useDeleteConfirmation';
 
 export const MyListingsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -25,6 +26,7 @@ export const MyListingsScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
   const [deleteProcessingId, setDeleteProcessingId] = useState<string | null>(null);
+  const { confirmDelete, DeleteConfirmationModal } = useDeleteConfirmation();
 
   const { data: listings, loading, refresh } = useDataFetch<ListingWithImages[]>({
     cacheKey: `user:listings:${user?.id || ''}`,
@@ -72,33 +74,31 @@ export const MyListingsScreen: React.FC = () => {
   );
 
   const handleDeleteListing = useCallback(
-    (listing: ListingWithImages) => {
-      Alert.alert(
-        'Delete listing',
-        'Are you sure you want to delete this listing? This action cannot be undone.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: async () => {
-              setDeleteProcessingId(listing.id);
-              try {
-                await listingsService.deleteListing(listing.id, false);
-                invalidateListingCaches();
-                await refresh();
-              } catch (error) {
-                console.error('Error deleting listing:', error);
-                Alert.alert('Delete failed', 'Could not delete the listing. Please try again.');
-              } finally {
-                setDeleteProcessingId(null);
-              }
-            },
-          },
-        ]
-      );
+    async (listing: ListingWithImages) => {
+      const confirmed = await confirmDelete({
+        title: 'Delete listing',
+        message: 'Are you sure you want to delete this listing? This action cannot be undone.',
+        confirmText: 'Delete',
+        cancelText: 'Keep listing',
+      });
+
+      if (!confirmed) {
+        return;
+      }
+
+      setDeleteProcessingId(listing.id);
+      try {
+        await listingsService.deleteListing(listing.id, false);
+        invalidateListingCaches();
+        await refresh();
+      } catch (error) {
+        console.error('Error deleting listing:', error);
+        Alert.alert('Delete failed', 'Could not delete the listing. Please try again.');
+      } finally {
+        setDeleteProcessingId(null);
+      }
     },
-    [invalidateListingCaches, refresh]
+    [confirmDelete, invalidateListingCaches, refresh]
   );
 
   const handleEditListing = (listing: ListingWithImages) => {
@@ -108,57 +108,61 @@ export const MyListingsScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Listings</Text>
-        <View style={styles.placeholder} />
-      </View>
+    <>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>My Listings</Text>
+          <View style={styles.placeholder} />
+        </View>
 
-      {loading && !listings ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#DC143C" />
-          <Text style={styles.loadingText}>Loading listings...</Text>
-        </View>
-      ) : listings && listings.length > 0 ? (
-        <FlatList
-          data={listings}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <ListingCardVertical
-              listing={item}
-              onPress={() => handleListingPress(item)}
-              mode="owner"
-              onToggleStatus={() => handleToggleStatus(item)}
-              onEdit={() => handleEditListing(item)}
-              onDelete={() => handleDeleteListing(item)}
-              statusLoading={statusUpdatingId === item.id}
-              deleteLoading={deleteProcessingId === item.id}
-            />
-          )}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor="#DC143C"
-            />
-          }
-        />
-      ) : (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="car-outline" size={64} color="#808080" />
-          <Text style={styles.emptyText}>No listings yet</Text>
-          <Text style={styles.emptySubtext}>Start selling your GT-R by creating a listing</Text>
-        </View>
-      )}
-    </SafeAreaView>
+        {loading && !listings ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#DC143C" />
+            <Text style={styles.loadingText}>Loading listings...</Text>
+          </View>
+        ) : listings && listings.length > 0 ? (
+          <FlatList
+            data={listings}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <ListingCardVertical
+                listing={item}
+                onPress={() => handleListingPress(item)}
+                mode="owner"
+                onToggleStatus={() => handleToggleStatus(item)}
+                onEdit={() => handleEditListing(item)}
+                onDelete={() => handleDeleteListing(item)}
+                statusLoading={statusUpdatingId === item.id}
+                deleteLoading={deleteProcessingId === item.id}
+              />
+            )}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor="#DC143C"
+              />
+            }
+          />
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="car-outline" size={64} color="#808080" />
+            <Text style={styles.emptyText}>No listings yet</Text>
+            <Text style={styles.emptySubtext}>Start selling your GT-R by creating a listing</Text>
+          </View>
+        )}
+      </SafeAreaView>
+      {DeleteConfirmationModal}
+    </>
   );
 };
 

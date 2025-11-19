@@ -137,6 +137,7 @@ export const LikedListingsScreen: React.FC = () => {
             />
           )}
           contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

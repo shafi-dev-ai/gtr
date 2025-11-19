@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { useAuth } from './AuthContext';
 import { favoritesService } from '../services/favorites';
 import { eventFavoritesService } from '../services/eventFavorites';
+import { forumService } from '../services/forum';
 import { realtimeService } from '../services/realtime';
 import dataManager from '../services/dataManager';
 
@@ -17,10 +18,17 @@ interface FavoritesContextType {
   favoriteEvents: Set<string>;
   refreshEventFavorites: () => Promise<void>;
   eventFavoritesVersion: number; // Version counter to trigger refreshes
+
+  // Forum favorites
+  isForumPostLiked: (postId: string) => boolean;
+  favoriteForumPosts: Set<string>;
+  refreshForumFavorites: () => Promise<void>;
+  forumFavoritesVersion: number;
   
   // Toggle functions
   toggleListingFavorite: (listingId: string) => Promise<boolean>;
   toggleEventFavorite: (eventId: string) => Promise<boolean>;
+  toggleForumFavorite: (postId: string) => Promise<boolean>;
 }
 
 const FavoritesContext = createContext<FavoritesContextType | undefined>(undefined);
@@ -29,11 +37,13 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const { user } = useAuth();
   const [favoriteListings, setFavoriteListings] = useState<Set<string>>(new Set());
   const [favoriteEvents, setFavoriteEvents] = useState<Set<string>>(new Set());
+  const [favoriteForumPosts, setFavoriteForumPosts] = useState<Set<string>>(new Set());
   const [isInitialized, setIsInitialized] = useState(false);
   
   // Keep refresh functions in refs to avoid stale closures
   const refreshListingFavoritesRef = useRef<(() => Promise<void>) | null>(null);
   const refreshEventFavoritesRef = useRef<(() => Promise<void>) | null>(null);
+  const refreshForumFavoritesRef = useRef<(() => Promise<void>) | null>(null);
 
   // Load initial favorites
   useEffect(() => {
@@ -48,6 +58,10 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         // Load event favorites
         const events = await eventFavoritesService.getUserFavoriteEvents(1000, 0);
         setFavoriteEvents(new Set(events.map(e => e.id)));
+
+        // Load forum favorites
+        const forumLikes = await forumService.getUserLikedPostIds(1000);
+        setFavoriteForumPosts(new Set(forumLikes));
 
         setIsInitialized(true);
       } catch (error) {
@@ -83,15 +97,29 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, [user?.id]);
 
+  // Refresh forum favorites
+  const refreshForumFavorites = useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      const likedPosts = await forumService.getUserLikedPostIds(1000);
+      setFavoriteForumPosts(new Set(likedPosts));
+    } catch (error) {
+      console.error('Error refreshing forum favorites:', error);
+    }
+  }, [user?.id]);
+
   // Store refresh functions in refs
   useEffect(() => {
     refreshListingFavoritesRef.current = refreshListingFavorites;
     refreshEventFavoritesRef.current = refreshEventFavorites;
-  }, [refreshListingFavorites, refreshEventFavorites]);
+    refreshForumFavoritesRef.current = refreshForumFavorites;
+  }, [refreshListingFavorites, refreshEventFavorites, refreshForumFavorites]);
 
   // Track refresh triggers for screens
   const [listingFavoritesVersion, setListingFavoritesVersion] = useState(0);
   const [eventFavoritesVersion, setEventFavoritesVersion] = useState(0);
+  const [forumFavoritesVersion, setForumFavoritesVersion] = useState(0);
 
   // Subscribe to real-time updates for listing favorites
   useEffect(() => {
@@ -154,11 +182,41 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
   }, [user?.id]);
 
+  // Subscribe to real-time updates for forum favorites
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let unsubscribe: (() => void) | null = null;
+
+    const setupSubscription = async () => {
+      unsubscribe = await realtimeService.subscribeToUserForumLikes(async () => {
+        dataManager.invalidateCache(/^user:favorites:forum/);
+        dataManager.invalidateCache(/^home:forum/);
+        dataManager.invalidateCache(/^explore:forum/);
+        dataManager.invalidateCache(/^home:forum:comments/);
+        dataManager.invalidateCache(/^explore:forum/);
+        if (refreshForumFavoritesRef.current) {
+          await refreshForumFavoritesRef.current();
+          setForumFavoritesVersion((prev) => prev + 1);
+        }
+      });
+    };
+
+    setupSubscription();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [user?.id]);
+
   // Clear favorites on logout
   useEffect(() => {
     if (!user) {
       setFavoriteListings(new Set());
       setFavoriteEvents(new Set());
+       setFavoriteForumPosts(new Set());
       setIsInitialized(false);
     }
   }, [user]);
@@ -172,6 +230,11 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const isEventFavorited = useCallback((eventId: string): boolean => {
     return favoriteEvents.has(eventId);
   }, [favoriteEvents]);
+
+  // Check if forum post is liked
+  const isForumPostLiked = useCallback((postId: string): boolean => {
+    return favoriteForumPosts.has(postId);
+  }, [favoriteForumPosts]);
 
   // Toggle listing favorite
   const toggleListingFavorite = useCallback(async (listingId: string): Promise<boolean> => {
@@ -253,6 +316,41 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, [favoriteEvents]);
 
+  // Toggle forum favorite
+  const toggleForumFavorite = useCallback(
+    async (postId: string): Promise<boolean> => {
+      const wasLiked = favoriteForumPosts.has(postId);
+      const previousSet = favoriteForumPosts;
+
+      const newSet = new Set(favoriteForumPosts);
+      if (wasLiked) {
+        newSet.delete(postId);
+      } else {
+        newSet.add(postId);
+      }
+      setFavoriteForumPosts(newSet);
+      setForumFavoritesVersion((prev) => prev + 1);
+
+      try {
+        if (wasLiked) {
+          await forumService.unlikePost(postId);
+        } else {
+          await forumService.likePost(postId);
+        }
+        dataManager.invalidateCache(/^user:favorites:forum/);
+        dataManager.invalidateCache(/^home:forum/);
+        setForumFavoritesVersion((prev) => prev + 1);
+        return !wasLiked;
+      } catch (error) {
+        console.error('Error toggling forum favorite:', error);
+        setFavoriteForumPosts(previousSet);
+        setForumFavoritesVersion((prev) => prev + 1);
+        throw error;
+      }
+    },
+    [favoriteForumPosts]
+  );
+
   return (
     <FavoritesContext.Provider
       value={{
@@ -266,6 +364,11 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         eventFavoritesVersion,
         toggleListingFavorite,
         toggleEventFavorite,
+        isForumPostLiked,
+        favoriteForumPosts,
+        refreshForumFavorites,
+        forumFavoritesVersion,
+        toggleForumFavorite,
       }}
     >
       {children}
@@ -280,4 +383,3 @@ export const useFavorites = () => {
   }
   return context;
 };
-

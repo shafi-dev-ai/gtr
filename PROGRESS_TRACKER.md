@@ -443,30 +443,34 @@ npm start
 
 ---
 
-## Day 9 - Auth UX & Location Filters Stabilization
+## Day 9 - Explore Tab & Forum System Stabilization
 
 ### Completed
 
-- ✅ Fixed auth screen keyboard/safe-area glitches: replaced `KeyboardAvoidingView` padding with custom scroll padding, added SafeArea top-only treatment, ensured CTA rows stay aligned, and tightened header spacing to remove the white band after keyboard dismiss.
-- ✅ Made “Create a new one” link in Login tappable without affecting the surrounding copy, matching expected UX.
-- ✅ Expanded shared location dataset with Canada, UK, and Australia states/provinces so both Create Listing and Marketplace filters have real options beyond the U.S.
-- ✅ Marketplace `FilterModal` polish: search filtering now memoized, dropdowns allow nested scrolling, typeahead suggestions close after selection, and the city picker no longer needs double taps.
-- ✅ Create Listing selection modals now support nested scroll + keyboard taps to prevent dropdowns from “sticking” when embedded in other scroll views.
+- ✅ Renamed the Events tab to **Explore** and mirrored the Messages-style segmented control so users can switch between Events and Forum vertically without horizontal scrolling.
+- ✅ Built `EventCardVertical` / `ForumPostCardVertical` and hooked them into the Explore screen + shared helpers, bringing attendee avatars, “N going” chips, and compact owner/favorite actions to the new layout.
+- ✅ Synced Explore events with batch RSVP data and the shared RSVP cache so every card shows live attendee counts that match the Home feed.
+- ✅ Overhauled forum likes/comments end-to-end:
+  - Favorites context now manages forum likes with realtime cache invalidation for Home, Explore, and profile “Liked” screens.
+  - All forum cards (home + explore + liked) display live like/comment totals next to action icons.
+  - Supabase script updated with full RLS coverage for `forum_posts`, `forum_comments`, `post_likes`, `comment_likes` plus triggers to keep `like_count`/`comment_count` synchronized automatically.
+- ✅ Liked Forum Posts screen filters against the favorites set so unliking removes a post instantly while the background fetch keeps data fresh.
+- ✅ Rebuilt **Create Event** and **Create Forum** flows with the Create Listing foundation—12-photo picker (size limits, removal), inline validation + keyboard-safe inputs, date/time pickers, and Supabase submit/edit hooks so every create surface behaves consistently.
 
 ### Important Files
 
-- `src/screens/auth/LoginScreen.tsx`, `src/screens/auth/RegisterScreen.tsx`
-- `src/components/marketplace/FilterModal.tsx`
-- `src/screens/listings/CreateListingScreen.tsx`
-- `src/utils/locationData.ts`, `src/constants/listingOptions.ts`
+- `src/screens/app/DashboardScreen.tsx`, `src/components/shared/EventCardVertical.tsx`, `src/components/shared/ForumPostCardVertical.tsx`
+- `src/components/home/EventsSection.tsx`, `src/components/home/ForumSection.tsx`
+- `src/context/FavoritesContext.tsx`, `src/services/forum.ts`, `src/services/realtime.ts`
+- `docs/setup_complete.sql` (updated policies + triggers for forum tables)
 
 ### Notes
 
-- Auth screens now rely on explicit scroll padding + SafeAreaView, so we can tweak keyboard spacing without battling `KeyboardAvoidingView`.
-- Location helpers remain the single source of truth for both marketplace filters and listing creation; future geo additions only update one file.
-- Filter modal improvements make the dropdown usable on long lists and mobile keyboards, aligning it with the Create Listing modal behavior.
+- Explore now reuses the same data hooks/cache invalidations as Home, so liking/unliking in one view updates every other screen without manual refresh.
+- Forum likes/comments depend on the `post_likes`/`forum_comments` tables directly—no more stale counts stored on `forum_posts`.
+- The Supabase script is future-proof: running it on new environments enables RLS, policies, triggers, and realtime publication membership in a single pass.
 
 ## Last Updated
 
-**Date**: Day 9 - Auth UX & Location Filters Stabilization  
-**Status**: Listing detail + creation work is complete, auth flows feel stable on keyboard open/close, and both marketplace filters + listing forms share the expanded location dataset with polished dropdown UX.
+**Date**: Day 9 - Explore Tab & Forum System Stabilization  
+**Status**: Explore delivers vertical event/forum feeds with shared card components, attendee data, and synchronized like/comment counts backed by updated Supabase RLS + trigger logic.

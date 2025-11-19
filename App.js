@@ -21,6 +21,7 @@ import { MyForumPostsScreen } from './src/screens/profile/MyForumPostsScreen';
 import { MyGarageScreen } from './src/screens/profile/MyGarageScreen';
 import { LikedListingsScreen } from './src/screens/profile/LikedListingsScreen';
 import { LikedEventsScreen } from './src/screens/profile/LikedEventsScreen';
+import { LikedForumPostsScreen } from './src/screens/profile/LikedForumPostsScreen';
 import { NotificationScreen } from './src/screens/notifications/NotificationScreen';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { conditionalStorage } from './src/services/sessionStorage';
@@ -28,6 +29,8 @@ import { InboxScreen } from './src/screens/messages/InboxScreen';
 import { ChatScreen } from './src/screens/messages/ChatScreen';
 import { ListingDetailScreen } from './src/screens/listings/ListingDetailScreen';
 import { CreateListingScreen } from './src/screens/listings/CreateListingScreen';
+import { CreateEventScreen } from './src/screens/events/CreateEventScreen';
+import { CreateForumPostScreen } from './src/screens/forum/CreateForumPostScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -63,11 +66,14 @@ const AppStack = () => {
       <Stack.Screen name="MyGarage" component={MyGarageScreen} />
       <Stack.Screen name="LikedListings" component={LikedListingsScreen} />
       <Stack.Screen name="LikedEvents" component={LikedEventsScreen} />
+      <Stack.Screen name="LikedForumPosts" component={LikedForumPostsScreen} />
       <Stack.Screen name="Notification" component={NotificationScreen} />
       <Stack.Screen name="Inbox" component={InboxScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
       <Stack.Screen name="ListingDetail" component={ListingDetailScreen} />
       <Stack.Screen name="CreateListing" component={CreateListingScreen} />
+      <Stack.Screen name="CreateEvent" component={CreateEventScreen} />
+      <Stack.Screen name="CreateForumPost" component={CreateForumPostScreen} />
     </Stack.Navigator>
   );
 };

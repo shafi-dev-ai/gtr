@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -12,69 +12,42 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
-import { useFavorites } from '../../context/FavoritesContext';
-import { eventFavoritesService, FavoriteEvent } from '../../services/eventFavorites';
-import { EventCard } from '../../components/shared/EventCard';
+import { forumService } from '../../services/forum';
+import { ForumPostWithUser } from '../../types/forum.types';
+import { ForumPostCard } from '../../components/shared/ForumPostCard';
 import { useDataFetch } from '../../hooks/useDataFetch';
-import { RequestPriority } from '../../services/dataManager';
-import dataManager from '../../services/dataManager';
+import dataManager, { RequestPriority } from '../../services/dataManager';
+import { useFavorites } from '../../context/FavoritesContext';
 
-export const LikedEventsScreen: React.FC = () => {
+export const LikedForumPostsScreen: React.FC = () => {
   const navigation = useNavigation();
   const { user } = useAuth();
-  const { refreshEventFavorites, eventFavoritesVersion, favoriteEvents: contextFavoriteEvents } = useFavorites();
   const [refreshing, setRefreshing] = useState(false);
+  const { forumFavoritesVersion } = useFavorites();
 
-  const { data: favoriteEvents, loading, refresh } = useDataFetch<FavoriteEvent[]>({
-    cacheKey: `user:favorites:events:${user?.id || ''}`,
-    fetchFn: () => eventFavoritesService.getUserFavoriteEvents(100, 0),
+  const { data: posts, loading, refresh } = useDataFetch<ForumPostWithUser[]>({
+    cacheKey: `user:favorites:forum:${user?.id || ''}`,
+    fetchFn: () => forumService.getLikedPosts(),
     priority: RequestPriority.HIGH,
     enabled: !!user,
   });
 
-  // Refresh when favorites context updates (version changes)
-  useEffect(() => {
-    if (user?.id && eventFavoritesVersion > 0) {
-      // Invalidate cache first, then refresh to ensure fresh data
-      const refreshData = async () => {
-        dataManager.invalidateCache(`user:favorites:events:${user.id}`);
-        // Small delay to ensure API has processed the change
-        await new Promise(resolve => setTimeout(resolve, 300));
-        await refresh();
-      };
-      refreshData();
-    }
-  }, [eventFavoritesVersion, user?.id, refresh]);
-
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    // Refresh both context and data fetch
-    await Promise.all([
-      refreshEventFavorites(),
-      refresh(),
-    ]);
+    await refresh();
     setRefreshing(false);
-  }, [refresh, refreshEventFavorites]);
+  }, [refresh]);
 
-  const handleEventPress = (event: FavoriteEvent) => {
-    // TODO: Navigate to event detail
-    console.log('Event pressed:', event.id);
+  const handlePostPress = (post: ForumPostWithUser) => {
+    console.log('Liked forum post pressed:', post.id);
   };
 
-  const handleFavorite = () => {
-    // FavoritesContext handles real-time updates and will trigger refresh
-    refresh();
-  };
-
-  // Filter events based on context to immediately remove unfavorited items
-  const eventsForDisplay = useMemo(() => {
-    if (!favoriteEvents) return [];
-    
-    // Filter out items that are no longer in the context Set (immediate removal)
-    return favoriteEvents.filter((event) => 
-      contextFavoriteEvents.has(event.id)
-    );
-  }, [favoriteEvents, contextFavoriteEvents]);
+  useEffect(() => {
+    if (user?.id && forumFavoritesVersion > 0) {
+      dataManager.invalidateCache(`user:favorites:forum:${user.id}`);
+      refresh();
+    }
+  }, [forumFavoritesVersion, user?.id, refresh]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -86,25 +59,24 @@ export const LikedEventsScreen: React.FC = () => {
         >
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Liked Events</Text>
+        <Text style={styles.headerTitle}>Liked Forum Posts</Text>
         <View style={styles.placeholder} />
       </View>
 
-      {loading && !favoriteEvents ? (
+      {loading && !posts ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#DC143C" />
-          <Text style={styles.loadingText}>Loading favorites...</Text>
+          <Text style={styles.loadingText}>Loading liked posts...</Text>
         </View>
-      ) : eventsForDisplay && eventsForDisplay.length > 0 ? (
+      ) : posts && posts.length > 0 ? (
         <FlatList
-          data={eventsForDisplay}
+          data={posts}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <View style={styles.cardWrapper}>
-              <EventCard
-                event={item}
-                onPress={() => handleEventPress(item)}
-                onFavorite={handleFavorite}
+              <ForumPostCard
+                post={item}
+                onPress={() => handlePostPress(item)}
                 containerStyle={styles.cardFullWidth}
               />
             </View>
@@ -122,8 +94,10 @@ export const LikedEventsScreen: React.FC = () => {
       ) : (
         <View style={styles.emptyContainer}>
           <Ionicons name="heart-outline" size={64} color="#808080" />
-          <Text style={styles.emptyText}>No liked events yet</Text>
-          <Text style={styles.emptySubtext}>Like events you're interested in attending</Text>
+          <Text style={styles.emptyText}>No liked forum posts</Text>
+          <Text style={styles.emptySubtext}>
+            Tap the heart icon on forum posts to save them here
+          </Text>
         </View>
       )}
     </SafeAreaView>
@@ -165,6 +139,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 32,
   },
   loadingText: {
     marginTop: 10,

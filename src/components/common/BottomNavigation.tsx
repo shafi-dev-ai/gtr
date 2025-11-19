@@ -3,7 +3,7 @@ import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-export type TabType = 'home' | 'marketplace' | 'create' | 'events' | 'profile';
+export type TabType = 'home' | 'marketplace' | 'create' | 'explore' | 'profile';
 
 interface BottomNavigationProps {
   activeTab: TabType;
@@ -37,10 +37,10 @@ const tabs: TabItem[] = [
     activeIcon: 'add-circle',
   },
   {
-    id: 'events',
-    label: 'Events',
-    icon: 'calendar-outline',
-    activeIcon: 'calendar',
+    id: 'explore',
+    label: 'Explore',
+    icon: 'compass-outline',
+    activeIcon: 'compass',
   },
   {
     id: 'profile',

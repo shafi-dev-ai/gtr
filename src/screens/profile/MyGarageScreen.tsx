@@ -118,6 +118,7 @@ export const MyGarageScreen: React.FC = () => {
             />
           )}
           contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -250,4 +251,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-

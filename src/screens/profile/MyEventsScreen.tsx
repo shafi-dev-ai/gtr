@@ -18,12 +18,14 @@ import { EventWithCreator } from '../../types/event.types';
 import { EventCard } from '../../components/shared/EventCard';
 import { useDataFetch } from '../../hooks/useDataFetch';
 import dataManager, { RequestPriority } from '../../services/dataManager';
+import { useDeleteConfirmation } from '../../hooks/useDeleteConfirmation';
 
 export const MyEventsScreen: React.FC = () => {
   const navigation = useNavigation();
   const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [deleteProcessingId, setDeleteProcessingId] = useState<string | null>(null);
+  const { confirmDelete, DeleteConfirmationModal } = useDeleteConfirmation();
 
   const { data: events, loading, refresh } = useDataFetch<EventWithCreator[]>({
     cacheKey: `user:events:${user?.id || ''}`,
@@ -54,33 +56,32 @@ export const MyEventsScreen: React.FC = () => {
   }, [user?.id]);
 
   const handleDeleteEvent = useCallback(
-    (event: EventWithCreator) => {
-      Alert.alert(
-        'Delete Event',
-        'Are you sure you want to delete this event? This action cannot be undone and all RSVPs will be removed.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: async () => {
-              setDeleteProcessingId(event.id);
-              try {
-                await eventsService.deleteEvent(event.id);
-                invalidateEventCaches();
-                await refresh();
-              } catch (error) {
-                console.error('Error deleting event:', error);
-                Alert.alert('Delete failed', 'Could not delete the event. Please try again.');
-              } finally {
-                setDeleteProcessingId(null);
-              }
-            },
-          },
-        ]
-      );
+    async (event: EventWithCreator) => {
+      const confirmed = await confirmDelete({
+        title: 'Delete event',
+        message:
+          'Are you sure you want to delete this event? This action cannot be undone and all RSVPs will be removed.',
+        confirmText: 'Delete',
+        cancelText: 'Keep event',
+      });
+
+      if (!confirmed) {
+        return;
+      }
+
+      setDeleteProcessingId(event.id);
+      try {
+        await eventsService.deleteEvent(event.id);
+        invalidateEventCaches();
+        await refresh();
+      } catch (error) {
+        console.error('Error deleting event:', error);
+        Alert.alert('Delete failed', 'Could not delete the event. Please try again.');
+      } finally {
+        setDeleteProcessingId(null);
+      }
     },
-    [invalidateEventCaches, refresh]
+    [confirmDelete, invalidateEventCaches, refresh]
   );
 
   const handleEditEvent = (event: EventWithCreator) => {
@@ -91,55 +92,63 @@ export const MyEventsScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Events</Text>
-        <View style={styles.placeholder} />
-      </View>
+    <>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>My Events</Text>
+          <View style={styles.placeholder} />
+        </View>
 
-      {loading && !events ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#DC143C" />
-          <Text style={styles.loadingText}>Loading events...</Text>
-        </View>
-      ) : events && events.length > 0 ? (
-        <FlatList
-          data={events}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <EventCard
-              event={item}
-              onPress={() => handleEventPress(item)}
-              onFavorite={handleFavorite}
-              mode="owner"
-              onDelete={() => handleDeleteEvent(item)}
-              deleteLoading={deleteProcessingId === item.id}
-            />
-          )}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor="#DC143C"
-            />
-          }
-        />
-      ) : (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="calendar-outline" size={64} color="#808080" />
-          <Text style={styles.emptyText}>No events yet</Text>
-          <Text style={styles.emptySubtext}>Create an event to bring the GT-R community together</Text>
-        </View>
-      )}
-    </SafeAreaView>
+        {loading && !events ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#DC143C" />
+            <Text style={styles.loadingText}>Loading events...</Text>
+          </View>
+        ) : events && events.length > 0 ? (
+          <FlatList
+            data={events}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <View style={styles.cardWrapper}>
+                <EventCard
+                  event={item}
+                  onPress={() => handleEventPress(item)}
+                  onFavorite={handleFavorite}
+                  mode="owner"
+                  onEdit={() => handleEditEvent(item)}
+                  onDelete={() => handleDeleteEvent(item)}
+                  deleteLoading={deleteProcessingId === item.id}
+                  containerStyle={styles.cardFullWidth}
+                />
+              </View>
+            )}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor="#DC143C"
+              />
+            }
+          />
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="calendar-outline" size={64} color="#808080" />
+            <Text style={styles.emptyText}>No events yet</Text>
+            <Text style={styles.emptySubtext}>Create an event to bring the GT-R community together</Text>
+          </View>
+        )}
+      </SafeAreaView>
+      {DeleteConfirmationModal}
+    </>
   );
 };
 
@@ -185,7 +194,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   listContent: {
-    padding: 16,
+    paddingVertical: 16,
+    paddingBottom: 32,
+  },
+  cardWrapper: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  cardFullWidth: {
+    width: '100%',
+    marginRight: 0,
   },
   emptyContainer: {
     flex: 1,
@@ -206,4 +225,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-

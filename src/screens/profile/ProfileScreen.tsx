@@ -126,7 +126,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
     skipCache: false, // Use cache - will fetch only if cache is empty or expired
   });
 
-  const { listingFavoritesVersion, eventFavoritesVersion } = useFavorites();
+  const { listingFavoritesVersion, eventFavoritesVersion, forumFavoritesVersion } = useFavorites();
 
   // Track if we've already fetched stats for this user to prevent duplicate fetches
   const hasFetchedStatsRef = useRef<string | null>(null);
@@ -195,11 +195,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
 
   // Refresh stats when favorites change (via FavoritesContext version counters)
   useEffect(() => {
-    if (user?.id && (listingFavoritesVersion > 0 || eventFavoritesVersion > 0)) {
+    if (user?.id && (listingFavoritesVersion > 0 || eventFavoritesVersion > 0 || forumFavoritesVersion > 0)) {
       dataManager.invalidateCache(`profile:stats:${user.id}`);
       refreshStats();
     }
-  }, [listingFavoritesVersion, eventFavoritesVersion, user?.id, refreshStats]);
+  }, [listingFavoritesVersion, eventFavoritesVersion, forumFavoritesVersion, user?.id, refreshStats]);
 
   const loading = profileLoading || statsLoading;
   const defaultStats = {
@@ -380,6 +380,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
     }
   };
 
+  const handleLikedForumPosts = () => {
+    if (navigation) {
+      navigation.navigate('LikedForumPosts');
+    } else {
+      console.log('Liked forum posts - navigation not available');
+    }
+  };
+
   const handleSavedSearches = () => {
     // TODO: Navigate to saved searches screen
     console.log('Saved searches');
@@ -547,6 +555,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
           icon="heart"
           label="Liked Events"
           onPress={handleLikedEvents}
+        />
+        <MenuItem
+          icon="heart"
+          label="Liked Forum Posts"
+          onPress={handleLikedForumPosts}
         />
         <MenuItem
           icon="search-outline"

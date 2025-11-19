@@ -117,6 +117,78 @@ export const forumService = {
   },
 
   /**
+   * Get posts liked by the current user
+   */
+  async getLikedPosts(limit: number = 50): Promise<ForumPostWithUser[]> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    const { data: likes, error: likesError } = await supabase
+      .from('post_likes')
+      .select('post_id, created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (likesError) throw likesError;
+    if (!likes || likes.length === 0) return [];
+
+    const postIds = likes.map((like) => like.post_id);
+
+    const { data: posts, error: postsError } = await supabase
+      .from('forum_posts')
+      .select('id, user_id, model, title, content, image_urls, like_count, comment_count, created_at, updated_at')
+      .in('id', postIds);
+
+    if (postsError) throw postsError;
+    if (!posts || posts.length === 0) return [];
+
+    const userIds = [...new Set(posts.map((post) => post.user_id))];
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, username, full_name, avatar_url')
+      .in('id', userIds);
+
+    if (profilesError) throw profilesError;
+
+    const postsMap = new Map(
+      posts.map((post) => [
+        post.id,
+        {
+          ...post,
+          profiles: profiles?.find((p) => p.id === post.user_id) || undefined,
+        },
+      ])
+    );
+
+    return likes
+      .map((like) => postsMap.get(like.post_id))
+      .filter((post): post is ForumPostWithUser => Boolean(post));
+  },
+
+  /**
+   * Get IDs of posts liked by the current user
+   */
+  async getUserLikedPostIds(limit: number = 1000): Promise<string[]> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const { data, error } = await supabase
+      .from('post_likes')
+      .select('post_id')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    return data?.map((like) => like.post_id) || [];
+  },
+
+  /**
    * Create a new forum post
    */
   async createPost(postData: CreateForumPostData): Promise<ForumPost> {
@@ -243,12 +315,18 @@ export const forumService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
 
-    const { error } = await supabase.from('post_likes').insert({
-      post_id: postId,
-      user_id: user.id,
-    });
+    const { error } = await supabase
+      .from('post_likes')
+      .insert({
+        post_id: postId,
+        user_id: user.id,
+      });
 
-    if (error) throw error;
+    if (error && error.code !== '23505') {
+      throw error;
+    }
+
+    await updatePostLikeCount(postId);
   },
 
   /**
@@ -264,7 +342,9 @@ export const forumService = {
       .eq('post_id', postId)
       .eq('user_id', user.id);
 
-    if (error) throw error;
+    if (error && error.code !== 'PGRST116') throw error;
+
+    await updatePostLikeCount(postId);
   },
 
   /**
@@ -284,4 +364,41 @@ export const forumService = {
     if (error && error.code !== 'PGRST116') return false; // PGRST116 = no rows returned
     return !!data;
   },
+
+  /**
+   * Delete a forum post
+   */
+  async deletePost(postId: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    const { error } = await supabase
+      .from('forum_posts')
+      .delete()
+      .eq('id', postId)
+      .eq('user_id', user.id);
+
+    if (error) throw error;
+  },
 };
+
+async function updatePostLikeCount(postId: string) {
+  const { count, error: countError } = await supabase
+    .from('post_likes')
+    .select('*', { count: 'exact', head: true })
+    .eq('post_id', postId);
+
+  if (countError) {
+    console.error('Failed to fetch like count', countError);
+    return;
+  }
+
+  const { error: updateError } = await supabase
+    .from('forum_posts')
+    .update({ like_count: count || 0 })
+    .eq('id', postId);
+
+  if (updateError) {
+    console.error('Failed to update post like count', updateError);
+  }
+}

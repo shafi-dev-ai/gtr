@@ -205,6 +205,47 @@ class RealtimeService {
   }
 
   /**
+   * Subscribe to all forum like changes for current user
+   */
+  async subscribeToUserForumLikes(callback: () => void): Promise<UnsubscribeFn> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return () => {};
+
+    const channelKey = `user_forum_likes_${user.id}`;
+
+    this.removeChannel(channelKey);
+
+    const channel = supabase
+      .channel(channelKey)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'post_likes',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          dataManager.invalidateCache(`user:favorites:forum:${user.id}`);
+          dataManager.invalidateCache(/^user:favorites:forum/);
+          dataManager.invalidateCache(/^home:forum/);
+          dataManager.invalidateCache(/^explore:forum/);
+          dataManager.invalidateCache(`profile:stats:${user.id}`);
+          callback();
+        }
+      )
+      .subscribe();
+
+    this.subscriptions.set(channelKey, channel);
+
+    return () => {
+      this.removeChannel(channelKey);
+    };
+  }
+
+  /**
    * Subscribe to forum post likes
    */
   async subscribeToPostLike(
@@ -240,6 +281,8 @@ class RealtimeService {
           
           // Invalidate forum cache
           dataManager.invalidateCache(/^home:forum/);
+          dataManager.invalidateCache(/^user:favorites:forum/);
+          dataManager.invalidateCache(/^explore:forum/);
           dataManager.invalidateCache(/^user:forum/);
         }
       )
@@ -310,6 +353,7 @@ class RealtimeService {
         () => {
           callback();
           dataManager.invalidateCache(/^home:forum/);
+          dataManager.invalidateCache(/^explore:forum/);
           dataManager.invalidateCache(/^user:forum/);
         }
       )
@@ -346,6 +390,8 @@ class RealtimeService {
         () => {
           callback();
           dataManager.invalidateCache(/^home:forum/);
+          dataManager.invalidateCache(/^explore:forum/);
+          dataManager.invalidateCache(/^home:forum:comments/);
           dataManager.invalidateCache(/^user:forum/);
         }
       )

@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ActivityIndicator, StyleProp, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { EventWithCreator } from '../../types/event.types';
@@ -14,8 +14,10 @@ interface EventCardProps {
   onPress?: () => void;
   onFavorite?: () => void;
   mode?: 'default' | 'owner';
+  onEdit?: () => void;
   onDelete?: () => void;
   deleteLoading?: boolean;
+  containerStyle?: StyleProp<ViewStyle>;
 }
 
 export const EventCard: React.FC<EventCardProps> = ({
@@ -23,8 +25,10 @@ export const EventCard: React.FC<EventCardProps> = ({
   onPress,
   onFavorite,
   mode = 'default',
+  onEdit,
   onDelete,
   deleteLoading = false,
+  containerStyle,
 }) => {
   const { isEventFavorited, toggleEventFavorite } = useFavorites();
   const isOwnerMode = mode === 'owner';
@@ -81,7 +85,7 @@ export const EventCard: React.FC<EventCardProps> = ({
 
   return (
     <TouchableOpacity
-      style={styles.card}
+      style={[styles.card, containerStyle]}
       onPress={onPress}
       activeOpacity={0.95}
     >
@@ -92,25 +96,8 @@ export const EventCard: React.FC<EventCardProps> = ({
           style={styles.eventImage}
           contentFit="cover"
         />
-        {/* Favorite Button or Delete Button */}
-        {isOwnerMode ? (
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={onDelete}
-            activeOpacity={0.8}
-            disabled={deleteLoading}
-          >
-            {deleteLoading ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Ionicons
-                name="trash-outline"
-                size={20}
-                color="#FFFFFF"
-              />
-            )}
-          </TouchableOpacity>
-        ) : (
+        {/* Favorite Button */}
+        {!isOwnerMode && (
           <TouchableOpacity
             style={styles.favoriteButton}
             onPress={handleFavoritePress}
@@ -153,6 +140,39 @@ export const EventCard: React.FC<EventCardProps> = ({
           <Text style={styles.description} numberOfLines={2}>
             {event.description}
           </Text>
+        )}
+
+        {/* Owner actions */}
+        {isOwnerMode && (
+          <View style={styles.ownerActions}>
+            {onEdit && (
+              <TouchableOpacity
+                style={[styles.ownerButton, styles.ownerPrimaryButton]}
+                onPress={onEdit}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.ownerButtonText, styles.ownerPrimaryButtonText]}>
+                  Edit event
+                </Text>
+              </TouchableOpacity>
+            )}
+            {onDelete && (
+              <TouchableOpacity
+                style={[styles.ownerButton, styles.ownerDangerButton]}
+                onPress={onDelete}
+                activeOpacity={0.85}
+                disabled={deleteLoading}
+              >
+                {deleteLoading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={[styles.ownerButtonText, styles.ownerDangerButtonText]}>
+                    Delete
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
         )}
 
         {/* Attendees */}
@@ -219,17 +239,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  deleteButton: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: '#DC143C',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   content: {
     padding: 16,
   },
@@ -260,6 +269,38 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: 12,
     lineHeight: 20,
+  },
+  ownerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  ownerButton: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ownerButtonText: {
+    fontSize: 14,
+    fontFamily: 'Rubik',
+    fontWeight: '600',
+  },
+  ownerPrimaryButton: {
+    backgroundColor: '#FFFFFF',
+  },
+  ownerPrimaryButtonText: {
+    color: '#181920',
+  },
+  ownerDangerButton: {
+    borderWidth: 1,
+    borderColor: '#FF7676',
+    backgroundColor: 'transparent',
+  },
+  ownerDangerButtonText: {
+    color: '#FF7676',
   },
   attendeesRow: {
     flexDirection: 'row',
@@ -302,4 +343,3 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
-

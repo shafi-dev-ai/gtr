@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput, StyleProp, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ForumPostWithUser, ForumCommentWithUser } from '../../types/forum.types';
 import { CommentCard } from './CommentCard';
-import { forumService } from '../../services/forum';
 import { realtimeService } from '../../services/realtime';
 import { RateLimiter } from '../../utils/throttle';
+import { useFavorites } from '../../context/FavoritesContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - 48; // Screen width minus padding
@@ -22,6 +22,12 @@ interface ForumPostCardProps {
   onComment?: () => void;
   onShare?: () => void;
   onReply?: (commentId: string) => void;
+  containerStyle?: StyleProp<ViewStyle>;
+  mode?: 'default' | 'owner';
+  onEdit?: () => void;
+  onDelete?: () => void;
+  showComments?: boolean;
+  showCommentInput?: boolean;
 }
 
 export const ForumPostCard: React.FC<ForumPostCardProps> = ({
@@ -35,46 +41,53 @@ export const ForumPostCard: React.FC<ForumPostCardProps> = ({
   onComment,
   onShare,
   onReply,
+  containerStyle,
+  mode = 'default',
+  onEdit,
+  onDelete,
+  showComments = true,
+  showCommentInput = true,
 }) => {
-  const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(post.like_count || 0);
+  const { isForumPostLiked, toggleForumFavorite } = useFavorites();
+  const isOwnerMode = mode === 'owner';
+  const isLiked = isOwnerMode ? false : isForumPostLiked(post.id);
+  const totalCommentCount =
+    typeof post.comment_count === 'number' ? post.comment_count : comments.length;
   
   // Rate limiter: max 10 like actions per 10 seconds
   const likeRateLimiter = useRef(new RateLimiter(10, 10000));
 
-  // Check like status on mount and subscribe to real-time updates
+  useEffect(() => {
+    setLikeCount(post.like_count || 0);
+  }, [post.like_count]);
+
+  // Subscribe to real-time updates for like count
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
 
-    const checkLikeStatus = async () => {
+    const subscribe = async () => {
       try {
-        const liked = await forumService.hasUserLikedPost(post.id);
-        setIsLiked(liked);
-        setLikeCount(post.like_count || 0);
-
-        // Subscribe to real-time updates
-        unsubscribe = await realtimeService.subscribeToPostLike(
-          post.id,
-          (isLiked, count) => {
-            setIsLiked(isLiked);
-            setLikeCount(count);
-          }
-        );
+        unsubscribe = await realtimeService.subscribeToPostLike(post.id, (_, count) => {
+          setLikeCount(count);
+        });
       } catch (error) {
-        console.error('Error checking like status:', error);
+        console.error('Error subscribing to post likes:', error);
       }
     };
 
-    checkLikeStatus();
+    subscribe();
 
     return () => {
       if (unsubscribe) {
         unsubscribe();
       }
     };
-  }, [post.id, post.like_count]);
+  }, [post.id]);
 
-  const handleLike = () => {
+  const handleLike = async () => {
+    if (isOwnerMode) return;
+
     // Rate limiting check
     if (!likeRateLimiter.current.canCall()) {
       console.warn('Like action rate limited');
@@ -85,11 +98,17 @@ export const ForumPostCard: React.FC<ForumPostCardProps> = ({
 
     const previousLiked = isLiked;
     const previousCount = likeCount;
-    
-    // Optimistic update
-    setIsLiked(!previousLiked);
-    setLikeCount(previousLiked ? previousCount - 1 : previousCount + 1);
-    onLike?.();
+
+    // Optimistic update for like count
+    setLikeCount(previousLiked ? Math.max(0, previousCount - 1) : previousCount + 1);
+
+    try {
+      await toggleForumFavorite(post.id);
+      onLike?.();
+    } catch (error) {
+      console.error('Error toggling forum favorite:', error);
+      setLikeCount(previousCount);
+    }
   };
 
   const primaryImage = post.image_urls && post.image_urls.length > 0 
@@ -97,7 +116,7 @@ export const ForumPostCard: React.FC<ForumPostCardProps> = ({
     : 'https://picsum.photos/800/600';
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, containerStyle]}>
       <TouchableOpacity
         activeOpacity={0.95}
         onPress={onPress}
@@ -121,38 +140,51 @@ export const ForumPostCard: React.FC<ForumPostCardProps> = ({
           </Text>
 
           {/* Interaction Icons */}
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={handleLike}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name={isLiked ? 'heart' : 'heart-outline'}
-                size={24}
-                color={isLiked ? '#DC143C' : '#FFFFFF'}
-              />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={onComment}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="chatbubble-outline" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={onShare}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="paper-plane-outline" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
+          {mode === 'owner' ? (
+            <View style={styles.ownerActions}>
+              {onEdit && (
+                <TouchableOpacity
+                  style={[styles.ownerButton, styles.ownerPrimaryButton]}
+                  onPress={onEdit}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.ownerButtonText, styles.ownerPrimaryButtonText]}>Edit post</Text>
+                </TouchableOpacity>
+              )}
+              {onDelete && (
+                <TouchableOpacity
+                  style={[styles.ownerButton, styles.ownerDangerButton]}
+                  onPress={onDelete}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.ownerButtonText, styles.ownerDangerButtonText]}>Delete</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            <View style={styles.actions}>
+              <TouchableOpacity style={styles.actionButton} onPress={handleLike} activeOpacity={0.7}>
+                <Ionicons
+                  name={isLiked ? 'heart' : 'heart-outline'}
+                  size={24}
+                  color={isLiked ? '#DC143C' : '#FFFFFF'}
+                />
+                <Text style={styles.actionValue}>{likeCount}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionButton} onPress={onComment} activeOpacity={0.7}>
+                <Ionicons name="chatbubble-outline" size={24} color="#FFFFFF" />
+                <Text style={styles.actionValue}>{totalCommentCount}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionButton} onPress={onShare} activeOpacity={0.7}>
+                <Ionicons name="paper-plane-outline" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </TouchableOpacity>
 
       {/* Comments Section */}
-      {comments.length > 0 && (
+      {mode !== 'owner' && showComments && comments.length > 0 && (
         <View style={styles.commentsSection}>
           {comments.map((comment) => (
             <CommentCard
@@ -165,23 +197,25 @@ export const ForumPostCard: React.FC<ForumPostCardProps> = ({
       )}
 
       {/* Add Comment Input */}
-      <View style={styles.commentInputContainer}>
-        <TextInput
-          style={styles.commentInput}
-          placeholder="Add a comment"
-          placeholderTextColor="#808080"
-          value={commentText}
-          onChangeText={onCommentTextChange}
-          multiline
-        />
-        <TouchableOpacity
-          style={styles.sendButton}
-          onPress={onCommentSubmit}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="send" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
+      {mode !== 'owner' && showCommentInput && (
+        <View style={styles.commentInputContainer}>
+          <TextInput
+            style={styles.commentInput}
+            placeholder="Add a comment"
+            placeholderTextColor="#808080"
+            value={commentText}
+            onChangeText={onCommentTextChange}
+            multiline
+          />
+          <TouchableOpacity
+            style={styles.sendButton}
+            onPress={onCommentSubmit}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="send" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 };
@@ -261,6 +295,46 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     padding: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  actionValue: {
+    fontSize: 14,
+    fontFamily: 'Rubik',
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  ownerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 8,
+  },
+  ownerButton: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ownerButtonText: {
+    fontSize: 14,
+    fontFamily: 'Rubik',
+    fontWeight: '600',
+  },
+  ownerPrimaryButton: {
+    backgroundColor: '#FFFFFF',
+  },
+  ownerPrimaryButtonText: {
+    color: '#181920',
+  },
+  ownerDangerButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#FF7676',
+  },
+  ownerDangerButtonText: {
+    color: '#FF7676',
   },
 });
-

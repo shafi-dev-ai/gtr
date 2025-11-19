@@ -1,5 +1,5 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, Alert } from 'react-native';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { BottomNavigation, TabType } from '../../components/common/BottomNavigation';
@@ -11,6 +11,14 @@ import { MarketplaceScreen } from '../marketplace/MarketplaceScreen';
 import { ProfileScreen } from '../profile/ProfileScreen';
 import { ListingWithImages } from '../../types/listing.types';
 import { openChatWithUser } from '../../utils/chatHelpers';
+import { useDataFetch } from '../../hooks/useDataFetch';
+import { RequestPriority } from '../../services/dataManager';
+import { eventsService } from '../../services/events';
+import { forumService } from '../../services/forum';
+import { EventWithCreator } from '../../types/event.types';
+import { ForumPostWithUser } from '../../types/forum.types';
+import { EventCardVertical } from '../../components/shared/EventCardVertical';
+import { ForumPostCardVertical } from '../../components/shared/ForumPostCardVertical';
 
 interface DashboardScreenProps {
   navigation?: any;
@@ -20,6 +28,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
   const { logout, user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [marketplaceSearchQuery, setMarketplaceSearchQuery] = useState<string>('');
+  const [exploreTab, setExploreTab] = useState<'events' | 'forum'>('events');
   const [refreshing, setRefreshing] = useState(false);
   const refreshFunctionsRef = useRef<Array<() => Promise<void>>>([]);
 
@@ -103,8 +112,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
   };
 
   const handleEventsSeeMorePress = () => {
-    // Switch to events tab
-    setActiveTab('events');
+    setActiveTab('explore');
+    setExploreTab('events');
   };
 
   const handlePostPress = (postId: string) => {
@@ -113,11 +122,20 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
   };
 
   const handleForumSeeMorePress = () => {
-    Alert.alert('Community coming soon', 'The community hub is on its way. Stay tuned!');
+    setActiveTab('explore');
+    setExploreTab('forum');
   };
 
   const handleCreateListingPress = () => {
     navigation?.navigate?.('CreateListing');
+  };
+
+  const handleCreateEventPress = () => {
+    navigation?.navigate?.('CreateEvent');
+  };
+
+  const handleCreateForumPress = () => {
+    navigation?.navigate?.('CreateForumPost');
   };
 
   const handleRefresh = useCallback(async () => {
@@ -209,20 +227,68 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.createCard}>
-            <View style={styles.createIconContainer}>
-              <Ionicons name="car-sport" size={28} color="#FFFFFF" />
+            <View style={styles.createCardRow}>
+              <View style={styles.createIconContainer}>
+                <Ionicons name="car-sport" size={26} color="#FFFFFF" />
+              </View>
+              <View style={styles.createCardBody}>
+                <Text style={styles.createTitle}>List your GT-R</Text>
+                <Text style={styles.createSubtitle}>
+                  Photos, price, location, and specs in a few taps.
+                </Text>
+              </View>
             </View>
-            <Text style={styles.createTitle}>List your GT-R</Text>
-            <Text style={styles.createSubtitle}>
-              Add photos, pricing, and location in a few steps. Buyers around the world are waiting.
-            </Text>
             <TouchableOpacity
               style={styles.primaryButton}
               onPress={handleCreateListingPress}
               activeOpacity={0.85}
             >
               <Ionicons name="add-circle-outline" size={18} color="#181920" />
-              <Text style={styles.primaryButtonText}>Create new listing</Text>
+              <Text style={styles.primaryButtonText}>Create listing</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.createCard}>
+            <View style={styles.createCardRow}>
+              <View style={[styles.createIconContainer, styles.createIconAccentCalendar]}>
+                <Ionicons name="calendar-outline" size={24} color="#FFFFFF" />
+              </View>
+              <View style={styles.createCardBody}>
+                <Text style={styles.createTitle}>Host a GT-R event</Text>
+                <Text style={styles.createSubtitle}>
+                  Build track days, meetups, or rallies with RSVPs.
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={handleCreateEventPress}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="flag-outline" size={18} color="#181920" />
+              <Text style={styles.primaryButtonText}>Create event</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.createCard}>
+            <View style={styles.createCardRow}>
+              <View style={[styles.createIconContainer, styles.createIconAccentForum]}>
+                <Ionicons name="chatbubbles-outline" size={22} color="#FFFFFF" />
+              </View>
+              <View style={styles.createCardBody}>
+                <Text style={styles.createTitle}>Start a forum thread</Text>
+                <Text style={styles.createSubtitle}>
+                  Share builds or questions with up to 12 gallery photos.
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={handleCreateForumPress}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="create-outline" size={18} color="#181920" />
+              <Text style={styles.primaryButtonText}>Create post</Text>
             </TouchableOpacity>
           </View>
 
@@ -235,11 +301,76 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
         </ScrollView>
       )}
 
+      {activeTab === 'explore' && (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor="#DC143C"
+            />
+          }
+        >
+          <View style={styles.exploreTabs}>
+            <TouchableOpacity
+              style={[
+                styles.exploreTabButton,
+                exploreTab === 'events' && styles.exploreTabButtonActive,
+              ]}
+              onPress={() => setExploreTab('events')}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.exploreTabLabel,
+                  exploreTab === 'events' && styles.exploreTabLabelActive,
+                ]}
+              >
+                Events
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.exploreTabButton,
+                exploreTab === 'forum' && styles.exploreTabButtonActive,
+              ]}
+              onPress={() => setExploreTab('forum')}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.exploreTabLabel,
+                  exploreTab === 'forum' && styles.exploreTabLabelActive,
+                ]}
+              >
+                Forum
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {exploreTab === 'events' ? (
+            <ExploreEventsList
+              onEventPress={handleEventPress}
+              onFavorite={handleEventFavorite}
+              onRefreshReady={handleEventsRefreshReady}
+            />
+          ) : (
+            <ExploreForumList
+              onPostPress={handlePostPress}
+              onRefreshReady={handleForumRefreshReady}
+            />
+          )}
+        </ScrollView>
+      )}
+
       {activeTab === 'profile' && (
         <ProfileScreen navigation={navigation} />
       )}
 
-      {activeTab !== 'home' && activeTab !== 'marketplace' && activeTab !== 'profile' && activeTab !== 'create' && (
+      {!['home', 'marketplace', 'profile', 'create', 'explore'].includes(activeTab) && (
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
@@ -259,6 +390,154 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
 
       {/* Bottom Navigation */}
       <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} />
+    </View>
+  );
+};
+
+interface ExploreEventsListProps {
+  onEventPress?: (eventId: string) => void;
+  onFavorite?: (eventId: string) => void;
+  onRefreshReady?: (refreshFn: () => Promise<void>) => void;
+}
+
+const ExploreEventsList: React.FC<ExploreEventsListProps> = ({
+  onEventPress,
+  onFavorite,
+  onRefreshReady,
+}) => {
+  const { user } = useAuth();
+  const {
+    data: events,
+    loading,
+    refresh,
+  } = useDataFetch<EventWithCreator[]>({
+    cacheKey: 'explore:events:20',
+    fetchFn: () => eventsService.getUpcomingEvents(40),
+    priority: RequestPriority.HIGH,
+  });
+
+  const eventIds = events?.map((event) => event.id) || [];
+  const { data: rsvpsByEvent } = useDataFetch<Record<string, any[]>>({
+    cacheKey: `explore:events:rsvps:${eventIds.join(',')}`,
+    fetchFn: async () => {
+      if (!events || events.length === 0) return {};
+      const ids = events.map((event) => event.id);
+      return eventsService.getBatchEventRSVPs(ids);
+    },
+    priority: RequestPriority.MEDIUM,
+    enabled: !!events && events.length > 0,
+  });
+
+  useEffect(() => {
+    onRefreshReady?.(refresh);
+  }, [onRefreshReady, refresh]);
+
+  if (loading && !events) {
+    return (
+      <View style={styles.exploreLoading}>
+        <ActivityIndicator size="large" color="#DC143C" />
+      </View>
+    );
+  }
+
+  const visibleEvents =
+    events?.filter((event) => (user?.id ? event.created_by !== user.id : true)) ?? [];
+
+  if (visibleEvents.length === 0) {
+    return (
+      <View style={styles.exploreEmptyState}>
+        <Ionicons name="calendar-outline" size={48} color="#808080" />
+        <Text style={styles.exploreEmptyTitle}>No events yet</Text>
+        <Text style={styles.exploreEmptySubtext}>
+          Upcoming GT-R meetups and drives will show up here.
+        </Text>
+      </View>
+    );
+  }
+
+  const eventsWithAttendees =
+    visibleEvents.map((event) => {
+      const rsvps = rsvpsByEvent?.[event.id] || [];
+      const attendeeAvatars = rsvps
+        .filter((rsvp: any) => rsvp.profiles?.avatar_url)
+        .slice(0, 5)
+        .map((rsvp: any) => rsvp.profiles!.avatar_url as string);
+      return {
+        ...event,
+        attendeeAvatars,
+        attendeeCount: rsvps.length,
+      };
+    }) ?? [];
+
+  return (
+    <View style={styles.exploreListContainer}>
+      {eventsWithAttendees.map((event) => (
+        <View style={styles.exploreCardWrapper} key={event.id}>
+          <EventCardVertical
+            event={event}
+            onPress={() => onEventPress?.(event.id)}
+            onFavorite={() => onFavorite?.(event.id)}
+          />
+        </View>
+      ))}
+    </View>
+  );
+};
+
+interface ExploreForumListProps {
+  onPostPress?: (postId: string) => void;
+  onRefreshReady?: (refreshFn: () => Promise<void>) => void;
+}
+
+const ExploreForumList: React.FC<ExploreForumListProps> = ({
+  onPostPress,
+  onRefreshReady,
+}) => {
+  const { user } = useAuth();
+  const {
+    data: posts,
+    loading,
+    refresh,
+  } = useDataFetch<ForumPostWithUser[]>({
+    cacheKey: 'explore:forum:recent:20',
+    fetchFn: () => forumService.getAllPosts(20),
+    priority: RequestPriority.HIGH,
+  });
+
+  useEffect(() => {
+    onRefreshReady?.(refresh);
+  }, [onRefreshReady, refresh]);
+
+  if (loading && !posts) {
+    return (
+      <View style={styles.exploreLoading}>
+        <ActivityIndicator size="large" color="#DC143C" />
+      </View>
+    );
+  }
+
+  const visiblePosts =
+    posts?.filter((post) => (user?.id ? post.user_id !== user.id : true)) ?? [];
+
+  if (visiblePosts.length === 0) {
+    return (
+      <View style={styles.exploreEmptyState}>
+        <Ionicons name="chatbubbles-outline" size={48} color="#808080" />
+        <Text style={styles.exploreEmptyTitle}>No forum posts yet</Text>
+        <Text style={styles.exploreEmptySubtext}>
+          Builds, questions, and spotting threads will appear here.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.exploreListContainer}>
+      {visiblePosts.map((post) => (
+        <View style={styles.exploreCardWrapper} key={post.id}>
+          <ForumPostCardVertical post={post} onPress={() => onPostPress?.(post.id)} />
+        </View>
+      ))}
     </View>
   );
 };
@@ -298,37 +577,53 @@ const styles = StyleSheet.create({
   },
   createScrollContent: {
     flexGrow: 1,
-    padding: 24,
+    padding: 20,
+    gap: 12,
   },
   createCard: {
     backgroundColor: '#1F222A',
-    borderRadius: 24,
-    padding: 24,
-    marginBottom: 16,
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 0,
+  },
+  createCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  createCardBody: {
+    flex: 1,
   },
   createIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     backgroundColor: 'rgba(220,20,60,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+  },
+  createIconAccentCalendar: {
+    backgroundColor: 'rgba(0, 122, 255, 0.18)',
+  },
+  createIconAccentForum: {
+    backgroundColor: 'rgba(155, 81, 224, 0.18)',
   },
   createTitle: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '700',
     color: '#FFFFFF',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   createSubtitle: {
     color: '#C7CAD7',
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: 20,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 0,
   },
   primaryButton: {
-    height: 52,
+    marginTop: 4,
+    height: 48,
     borderRadius: 16,
     backgroundColor: '#FFFFFF',
     flexDirection: 'row',
@@ -344,7 +639,8 @@ const styles = StyleSheet.create({
   createTipsCard: {
     backgroundColor: '#1A1D26',
     borderRadius: 20,
-    padding: 20,
+    padding: 16,
+    marginTop: 8,
   },
   createTipsTitle: {
     fontSize: 16,
@@ -356,5 +652,63 @@ const styles = StyleSheet.create({
     color: '#9CA0B8',
     fontSize: 14,
     marginBottom: 6,
+  },
+  exploreTabs: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#232634',
+  },
+  exploreTabButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  exploreTabButtonActive: {
+    borderBottomWidth: 2,
+    borderBottomColor: '#FFFFFF',
+  },
+  exploreTabLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#72768A',
+  },
+  exploreTabLabelActive: {
+    color: '#FFFFFF',
+  },
+  exploreListContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    gap: 16,
+  },
+  exploreCardWrapper: {
+    alignItems: 'center',
+  },
+  exploreCardFullWidth: {
+    width: '100%',
+    marginRight: 0,
+  },
+  exploreEmptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 24,
+  },
+  exploreEmptyTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 12,
+  },
+  exploreEmptySubtext: {
+    color: '#9CA0B8',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  exploreLoading: {
+    paddingVertical: 40,
+    alignItems: 'center',
   },
 });

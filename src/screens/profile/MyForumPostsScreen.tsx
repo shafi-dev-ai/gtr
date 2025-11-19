@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -17,11 +18,13 @@ import { ForumPostWithUser } from '../../types/forum.types';
 import { ForumPostCard } from '../../components/shared/ForumPostCard';
 import { useDataFetch } from '../../hooks/useDataFetch';
 import { RequestPriority } from '../../services/dataManager';
+import { useDeleteConfirmation } from '../../hooks/useDeleteConfirmation';
 
 export const MyForumPostsScreen: React.FC = () => {
   const navigation = useNavigation();
   const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
+  const { confirmDelete, DeleteConfirmationModal } = useDeleteConfirmation();
 
   const { data: posts, loading, refresh } = useDataFetch<ForumPostWithUser[]>({
     cacheKey: `user:forum:posts:${user?.id || ''}`,
@@ -46,53 +49,86 @@ export const MyForumPostsScreen: React.FC = () => {
     refresh();
   };
 
-  return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Forum Posts</Text>
-        <View style={styles.placeholder} />
-      </View>
+  const handleDeletePost = useCallback(
+    async (post: ForumPostWithUser) => {
+      const confirmed = await confirmDelete({
+        title: 'Delete post',
+        message: 'Are you sure you want to delete this forum post? This action cannot be undone.',
+        confirmText: 'Delete',
+        cancelText: 'Keep post',
+      });
 
-      {loading && !posts ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#DC143C" />
-          <Text style={styles.loadingText}>Loading posts...</Text>
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        await forumService.deletePost(post.id);
+        await refresh();
+      } catch (error) {
+        console.error('Failed to delete post', error);
+        Alert.alert('Delete failed', 'Unable to delete post. Please try again.');
+      }
+    },
+    [confirmDelete, refresh]
+  );
+
+  return (
+    <>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>My Forum Posts</Text>
+          <View style={styles.placeholder} />
         </View>
-      ) : posts && posts.length > 0 ? (
-        <FlatList
-          data={posts}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <ForumPostCard
-              post={item}
-              onPress={() => handlePostPress(item)}
-              onLike={handleLike}
-            />
-          )}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor="#DC143C"
-            />
-          }
-        />
-      ) : (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="chatbubbles-outline" size={64} color="#808080" />
-          <Text style={styles.emptyText}>No posts yet</Text>
-          <Text style={styles.emptySubtext}>Share your GT-R experiences with the community</Text>
-        </View>
-      )}
-    </SafeAreaView>
+
+        {loading && !posts ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#DC143C" />
+            <Text style={styles.loadingText}>Loading posts...</Text>
+          </View>
+        ) : posts && posts.length > 0 ? (
+          <FlatList
+            data={posts}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <View style={styles.cardWrapper}>
+                <ForumPostCard
+                  post={item}
+                  onPress={() => handlePostPress(item)}
+                  mode="owner"
+                  onEdit={() => Alert.alert('Edit', 'Edit post coming soon.')}
+                  onDelete={() => handleDeletePost(item)}
+                  containerStyle={styles.cardFullWidth}
+                />
+              </View>
+            )}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor="#DC143C"
+              />
+            }
+          />
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="chatbubbles-outline" size={64} color="#808080" />
+            <Text style={styles.emptyText}>No posts yet</Text>
+            <Text style={styles.emptySubtext}>Share your GT-R experiences with the community</Text>
+          </View>
+        )}
+      </SafeAreaView>
+      {DeleteConfirmationModal}
+    </>
   );
 };
 
@@ -138,7 +174,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   listContent: {
-    padding: 16,
+    paddingVertical: 16,
+    paddingBottom: 32,
+  },
+  cardWrapper: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  cardFullWidth: {
+    width: '100%',
+    marginRight: 0,
   },
   emptyContainer: {
     flex: 1,
@@ -159,4 +205,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-

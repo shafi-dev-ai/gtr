@@ -66,35 +66,12 @@ export const ForumSection: React.FC<ForumSectionProps> = ({
     }));
   }, [visiblePosts, commentsByPost, commentTexts]);
 
-  // Critical action for liking posts
-  const { execute: executeLike } = useCriticalAction({
-    cacheKey: 'forum:like',
-    actionFn: async () => null,
-    invalidateCache: ['home:forum'],
-  });
-
   // Critical action for commenting
   const { execute: executeComment } = useCriticalAction({
     cacheKey: 'forum:comment',
     actionFn: async () => null,
     invalidateCache: ['home:forum'],
   });
-
-  const handleLike = async (postId: string) => {
-    try {
-      const hasLiked = await forumService.hasUserLikedPost(postId);
-      if (hasLiked) {
-        await forumService.unlikePost(postId);
-      } else {
-        await forumService.likePost(postId);
-      }
-      // Invalidate cache and refresh
-      await executeLike();
-      await refresh();
-    } catch (error) {
-      console.error('Error liking post:', error);
-    }
-  };
 
   const handleCommentTextChange = (postId: string, text: string) => {
     setCommentTexts(prev => ({ ...prev, [postId]: text }));
@@ -199,7 +176,6 @@ export const ForumSection: React.FC<ForumSectionProps> = ({
             onCommentTextChange={(text) => handleCommentTextChange(post.id, text)}
             onCommentSubmit={() => handleCommentSubmit(post.id)}
             onPress={() => onPostPress?.(post.id)}
-            onLike={() => handleLike(post.id)}
             onComment={() => onPostPress?.(post.id)}
             onShare={() => {}}
             onReply={() => {}}
@@ -263,4 +239,3 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
 });
-

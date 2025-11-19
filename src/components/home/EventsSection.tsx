@@ -270,4 +270,3 @@ const styles = StyleSheet.create({
     color: '#808080',
   },
 });
-

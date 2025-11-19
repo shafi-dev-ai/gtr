@@ -170,7 +170,7 @@ class InitializationService {
           () => forumService.getAllPosts(20)
         );
         break;
-      case 'events':
+      case 'explore':
         dataManager.prefetch(
           'events:upcoming:20',
           () => eventsService.getUpcomingEvents(20)
