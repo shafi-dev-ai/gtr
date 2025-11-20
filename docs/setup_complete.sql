@@ -915,33 +915,49 @@ GRANT EXECUTE ON FUNCTION public.handle_new_user() TO service_role;
 
 -- Function: Update comment count on forum posts
 CREATE OR REPLACE FUNCTION update_forum_post_comment_count()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
-    UPDATE forum_posts SET comment_count = comment_count + 1 WHERE id = NEW.post_id;
+    UPDATE forum_posts
+    SET comment_count = comment_count + 1
+    WHERE id = NEW.post_id;
     RETURN NEW;
   ELSIF TG_OP = 'DELETE' THEN
-    UPDATE forum_posts SET comment_count = comment_count - 1 WHERE id = OLD.post_id;
+    UPDATE forum_posts
+    SET comment_count = GREATEST(comment_count - 1, 0)
+    WHERE id = OLD.post_id;
     RETURN OLD;
   END IF;
   RETURN NULL;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- Function: Update like count on forum posts
 CREATE OR REPLACE FUNCTION update_forum_post_like_count()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
-    UPDATE forum_posts SET like_count = like_count + 1 WHERE id = NEW.post_id;
+    UPDATE forum_posts
+    SET like_count = like_count + 1
+    WHERE id = NEW.post_id;
     RETURN NEW;
   ELSIF TG_OP = 'DELETE' THEN
-    UPDATE forum_posts SET like_count = like_count - 1 WHERE id = OLD.post_id;
+    UPDATE forum_posts
+    SET like_count = GREATEST(like_count - 1, 0)
+    WHERE id = OLD.post_id;
     RETURN OLD;
   END IF;
   RETURN NULL;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- Function: Update RSVP count on events
 CREATE OR REPLACE FUNCTION update_event_rsvp_count()
@@ -1252,30 +1268,34 @@ GRANT EXECUTE ON FUNCTION has_user_favorited_event(UUID, UUID) TO anon;
 
 -- Function: Update comment reply count
 CREATE OR REPLACE FUNCTION update_comment_reply_count()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
-  IF TG_OP = 'INSERT' THEN
-    IF NEW.parent_comment_id IS NOT NULL THEN
-      UPDATE forum_comments
-      SET reply_count = reply_count + 1
-      WHERE id = NEW.parent_comment_id;
-    END IF;
+  IF TG_OP = 'INSERT' AND NEW.parent_comment_id IS NOT NULL THEN
+    UPDATE forum_comments
+    SET reply_count = reply_count + 1
+    WHERE id = NEW.parent_comment_id;
     RETURN NEW;
-  ELSIF TG_OP = 'DELETE' THEN
-    IF OLD.parent_comment_id IS NOT NULL THEN
-      UPDATE forum_comments
-      SET reply_count = GREATEST(reply_count - 1, 0)
-      WHERE id = OLD.parent_comment_id;
-    END IF;
+  ELSIF TG_OP = 'DELETE' AND OLD.parent_comment_id IS NOT NULL THEN
+    UPDATE forum_comments
+    SET reply_count = GREATEST(reply_count - 1, 0)
+    WHERE id = OLD.parent_comment_id;
     RETURN OLD;
   END IF;
   RETURN NULL;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- Function: Update comment like count
 CREATE OR REPLACE FUNCTION update_comment_like_count()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
     UPDATE forum_comments
@@ -1290,7 +1310,7 @@ BEGIN
   END IF;
   RETURN NULL;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- Function: Get comment replies
 CREATE OR REPLACE FUNCTION get_comment_replies(
@@ -1907,12 +1927,20 @@ CREATE TRIGGER update_user_garage_updated_at BEFORE UPDATE ON user_garage FOR EA
 CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- Forum comment count triggers
+DROP TRIGGER IF EXISTS update_comment_count_on_insert ON forum_comments;
+DROP TRIGGER IF EXISTS update_comment_count_on_delete ON forum_comments;
+DROP TRIGGER IF EXISTS update_reply_count_on_insert ON forum_comments;
+DROP TRIGGER IF EXISTS update_reply_count_on_delete ON forum_comments;
 CREATE TRIGGER update_comment_count_on_insert AFTER INSERT ON forum_comments FOR EACH ROW EXECUTE FUNCTION update_forum_post_comment_count();
 CREATE TRIGGER update_comment_count_on_delete AFTER DELETE ON forum_comments FOR EACH ROW EXECUTE FUNCTION update_forum_post_comment_count();
 CREATE TRIGGER update_reply_count_on_insert AFTER INSERT ON forum_comments FOR EACH ROW EXECUTE FUNCTION update_comment_reply_count();
 CREATE TRIGGER update_reply_count_on_delete AFTER DELETE ON forum_comments FOR EACH ROW EXECUTE FUNCTION update_comment_reply_count();
 
 -- Forum like count triggers
+DROP TRIGGER IF EXISTS update_like_count_on_insert ON post_likes;
+DROP TRIGGER IF EXISTS update_like_count_on_delete ON post_likes;
+DROP TRIGGER IF EXISTS comment_like_count_on_insert ON comment_likes;
+DROP TRIGGER IF EXISTS comment_like_count_on_delete ON comment_likes;
 CREATE TRIGGER update_like_count_on_insert AFTER INSERT ON post_likes FOR EACH ROW EXECUTE FUNCTION update_forum_post_like_count();
 CREATE TRIGGER update_like_count_on_delete AFTER DELETE ON post_likes FOR EACH ROW EXECUTE FUNCTION update_forum_post_like_count();
 CREATE TRIGGER update_comment_like_count_on_insert AFTER INSERT ON comment_likes FOR EACH ROW EXECUTE FUNCTION update_comment_like_count();

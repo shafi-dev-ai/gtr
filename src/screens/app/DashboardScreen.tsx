@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, Alert, ActivityIndicator, Dimensions, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { BottomNavigation, TabType } from '../../components/common/BottomNavigation';
@@ -20,6 +20,8 @@ import { ForumPostWithUser } from '../../types/forum.types';
 import { EventCardVertical } from '../../components/shared/EventCardVertical';
 import { ForumPostCardVertical } from '../../components/shared/ForumPostCardVertical';
 
+const SCREEN_WIDTH = Dimensions.get('window').width;
+
 interface DashboardScreenProps {
   navigation?: any;
 }
@@ -31,6 +33,41 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
   const [exploreTab, setExploreTab] = useState<'events' | 'forum'>('events');
   const [refreshing, setRefreshing] = useState(false);
   const refreshFunctionsRef = useRef<Array<() => Promise<void>>>([]);
+  const explorePagerRef = useRef<ScrollView | null>(null);
+  const exploreTabChangeSource = useRef<'manual' | 'scroll'>('manual');
+
+  const updateExploreTab = useCallback(
+    (tab: 'events' | 'forum', source: 'manual' | 'scroll' = 'manual') => {
+      exploreTabChangeSource.current = source;
+      setExploreTab((prev) => (prev === tab ? prev : tab));
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (activeTab !== 'explore' || !explorePagerRef.current) {
+      return;
+    }
+
+    if (exploreTabChangeSource.current === 'scroll') {
+      exploreTabChangeSource.current = 'manual';
+      return;
+    }
+
+    const offset = exploreTab === 'events' ? 0 : SCREEN_WIDTH;
+    explorePagerRef.current.scrollTo({ x: offset, animated: true });
+  }, [activeTab, exploreTab]);
+
+  const handleExploreMomentumScrollEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const index = Math.round(event.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+      const nextTab = index === 0 ? 'events' : 'forum';
+      if (nextTab !== exploreTab) {
+        updateExploreTab(nextTab, 'scroll');
+      }
+    },
+    [exploreTab, updateExploreTab]
+  );
 
   const handleLogout = async () => {
     await logout();
@@ -113,7 +150,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
 
   const handleEventsSeeMorePress = () => {
     setActiveTab('explore');
-    setExploreTab('events');
+    updateExploreTab('events');
   };
 
   const handlePostPress = (postId: string) => {
@@ -123,7 +160,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
 
   const handleForumSeeMorePress = () => {
     setActiveTab('explore');
-    setExploreTab('forum');
+    updateExploreTab('forum');
   };
 
   const handleCreateListingPress = () => {
@@ -320,7 +357,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
                 styles.exploreTabButton,
                 exploreTab === 'events' && styles.exploreTabButtonActive,
               ]}
-              onPress={() => setExploreTab('events')}
+              onPress={() => updateExploreTab('events')}
               activeOpacity={0.8}
             >
               <Text
@@ -337,7 +374,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
                 styles.exploreTabButton,
                 exploreTab === 'forum' && styles.exploreTabButtonActive,
               ]}
-              onPress={() => setExploreTab('forum')}
+              onPress={() => updateExploreTab('forum')}
               activeOpacity={0.8}
             >
               <Text
@@ -351,18 +388,30 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
             </TouchableOpacity>
           </View>
 
-          {exploreTab === 'events' ? (
-            <ExploreEventsList
-              onEventPress={handleEventPress}
-              onFavorite={handleEventFavorite}
-              onRefreshReady={handleEventsRefreshReady}
-            />
-          ) : (
-            <ExploreForumList
-              onPostPress={handlePostPress}
-              onRefreshReady={handleForumRefreshReady}
-            />
-          )}
+          <ScrollView
+            ref={explorePagerRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            style={styles.explorePager}
+            onMomentumScrollEnd={handleExploreMomentumScrollEnd}
+            scrollEventThrottle={16}
+            bounces={false}
+          >
+            <View style={styles.explorePage}>
+              <ExploreEventsList
+                onEventPress={handleEventPress}
+                onFavorite={handleEventFavorite}
+                onRefreshReady={handleEventsRefreshReady}
+              />
+            </View>
+            <View style={styles.explorePage}>
+              <ExploreForumList
+                onPostPress={handlePostPress}
+                onRefreshReady={handleForumRefreshReady}
+              />
+            </View>
+          </ScrollView>
         </ScrollView>
       )}
 
@@ -677,6 +726,12 @@ const styles = StyleSheet.create({
   },
   exploreTabLabelActive: {
     color: '#FFFFFF',
+  },
+  explorePager: {
+    flexGrow: 0,
+  },
+  explorePage: {
+    width: SCREEN_WIDTH,
   },
   exploreListContainer: {
     paddingHorizontal: 16,

@@ -54,7 +54,7 @@ export interface CreateListingData {
   state?: string; // State/Province (dependent on country)
   city?: string;
   zip_code?: string;
-  street_address?: string; // Custom street address
+  street_address?: string | null; // Custom street address
   location?: string; // Full location string (kept for backward compatibility)
   vin?: string;
   color?: string;

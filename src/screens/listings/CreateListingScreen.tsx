@@ -471,8 +471,10 @@ export const CreateListingScreen: React.FC = () => {
 
     setIsSubmitting(true);
     try {
+      const trimmedStreetAddress = streetAddress.trim();
+
       const location = formatLocation({
-        street_address: streetAddress || undefined,
+        street_address: trimmedStreetAddress || undefined,
         city: city || undefined,
         state: selectedState?.code || undefined,
         country: selectedCountry?.code || undefined,
@@ -491,7 +493,7 @@ export const CreateListingScreen: React.FC = () => {
         country: selectedCountry?.code,
         state: selectedState?.code,
         city: city.trim(),
-        street_address: streetAddress.trim() || undefined,
+        street_address: trimmedStreetAddress || null,
         zip_code: zipCode.trim(),
         location,
       };
@@ -614,12 +616,15 @@ export const CreateListingScreen: React.FC = () => {
 
         <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Photos</Text>
-              <Text style={styles.sectionCounter}>{totalPhotoCount}/{MAX_PHOTOS} photos</Text>
-            </View>
-            <Text style={styles.sectionHelper}>Each photo must be under 10MB.</Text>
-            {renderPhotoGrid()}
+            <Text style={styles.sectionTitle}>Photos</Text>
+            <Text style={styles.sectionCounter}>{totalPhotoCount}/{MAX_PHOTOS} photos</Text>
           </View>
+          <Text style={styles.sectionHelper}>Each photo must be under 10MB.</Text>
+          {renderPhotoGrid()}
+          {totalPhotoCount === 0 && (
+            <Text style={styles.fieldError}>Please select at least one photo.</Text>
+          )}
+        </View>
 
           <View style={styles.section}>
             <Text style={styles.label}>Title</Text>
@@ -836,7 +841,7 @@ export const CreateListingScreen: React.FC = () => {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.label}>Street Address</Text>
+            <Text style={styles.label}>Street Address (optional)</Text>
             <TextInput
               style={styles.input}
               placeholder="Enter street address"
@@ -980,6 +985,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 6,
     marginBottom: 12,
+  },
+  fieldError: {
+    color: '#FF6B6B',
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: 8,
   },
   label: {
     color: '#9CA0B8',

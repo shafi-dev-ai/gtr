@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -23,7 +23,6 @@ import { LikedListingsScreen } from './src/screens/profile/LikedListingsScreen';
 import { LikedEventsScreen } from './src/screens/profile/LikedEventsScreen';
 import { LikedForumPostsScreen } from './src/screens/profile/LikedForumPostsScreen';
 import { NotificationScreen } from './src/screens/notifications/NotificationScreen';
-import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { conditionalStorage } from './src/services/sessionStorage';
 import { InboxScreen } from './src/screens/messages/InboxScreen';
 import { ChatScreen } from './src/screens/messages/ChatScreen';
@@ -31,6 +30,7 @@ import { ListingDetailScreen } from './src/screens/listings/ListingDetailScreen'
 import { CreateListingScreen } from './src/screens/listings/CreateListingScreen';
 import { CreateEventScreen } from './src/screens/events/CreateEventScreen';
 import { CreateForumPostScreen } from './src/screens/forum/CreateForumPostScreen';
+import { BrandSplash } from './src/components/common/BrandSplash';
 
 const Stack = createNativeStackNavigator();
 
@@ -80,9 +80,18 @@ const AppStack = () => {
 
 const RootNavigator = () => {
   const { isAuthenticated, isLoading, isLoggingOut } = useAuth();
+  const [showStartupSplash, setShowStartupSplash] = useState(true);
+
+  useEffect(() => {
+    if (!isLoading) {
+      const timeout = setTimeout(() => setShowStartupSplash(false), 500);
+      return () => clearTimeout(timeout);
+    }
+    return undefined;
+  }, [isLoading]);
 
   // Check if we need to navigate to ResetPassword when AuthStack becomes active
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isLoading && !isAuthenticated && navigationRef.isReady()) {
       // We're on AuthStack now, check if we should navigate to ResetPassword
       if (shouldNavigateToResetPasswordScreen()) {
@@ -112,15 +121,8 @@ const RootNavigator = () => {
     }
   }, [isAuthenticated, isLoading]);
 
-  if (isLoading || isLoggingOut) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#DC143C" />
-        {isLoggingOut && (
-          <Text style={styles.loadingText}>Logging out...</Text>
-        )}
-      </View>
-    );
+  if (isLoading || isLoggingOut || showStartupSplash) {
+    return <BrandSplash message={isLoggingOut ? 'Logging out...' : undefined} />;
   }
 
   return (
@@ -133,7 +135,6 @@ const RootNavigator = () => {
 export default function App() {
   const notificationListener = useRef(null);
   const responseListener = useRef(null);
-
   useEffect(() => {
     // Handle app state changes to clear non-persistent sessions
     const subscription = AppState.addEventListener('change', (nextAppState) => {
@@ -218,19 +219,3 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: '#181920',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#FFFFFF',
-    fontFamily: 'Rubik',
-    fontWeight: '500',
-  },
-});

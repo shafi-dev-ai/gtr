@@ -9,9 +9,9 @@
     "newArchEnabled": true,
     "scheme": "gtr-marketplace",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/images/logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0F1018"
     },
     "ios": {
       "supportsTablet": true,

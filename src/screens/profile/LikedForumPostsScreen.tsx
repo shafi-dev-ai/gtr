@@ -78,6 +78,8 @@ export const LikedForumPostsScreen: React.FC = () => {
                 post={item}
                 onPress={() => handlePostPress(item)}
                 containerStyle={styles.cardFullWidth}
+                showComments={false}
+                showCommentInput={false}
               />
             </View>
           )}

@@ -468,6 +468,9 @@ export const CreateEventScreen: React.FC = () => {
           <Text style={styles.subLabel}>{photos.length}/{MAX_PHOTOS}</Text>
           </View>
           {renderPhotoGrid()}
+          {photos.length === 0 && (
+            <Text style={styles.fieldError}>Please select at least one photo.</Text>
+          )}
           {coverPreview && (
             <Text style={styles.helperText}>Only the first image is used as the event cover.</Text>
           )}
@@ -725,6 +728,12 @@ const styles = StyleSheet.create({
     marginTop: 8,
     color: '#6E738D',
     fontSize: 12,
+  },
+  fieldError: {
+    marginTop: 8,
+    color: '#FF6B6B',
+    fontSize: 13,
+    fontWeight: '500',
   },
   publishButton: {
     marginTop: 24,
