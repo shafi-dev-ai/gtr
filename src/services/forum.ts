@@ -380,6 +380,28 @@ export const forumService = {
 
     if (error) throw error;
   },
+
+  /**
+   * Update a forum post
+   */
+  async updatePost(postId: string, updates: Partial<CreateForumPostData>): Promise<ForumPost> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    const { data, error } = await supabase
+      .from('forum_posts')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', postId)
+      .eq('user_id', user.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
 };
 
 async function updatePostLikeCount(postId: string) {

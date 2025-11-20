@@ -10,14 +10,14 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { forumService } from '../../services/forum';
 import { ForumPostWithUser } from '../../types/forum.types';
 import { ForumPostCard } from '../../components/shared/ForumPostCard';
 import { useDataFetch } from '../../hooks/useDataFetch';
-import { RequestPriority } from '../../services/dataManager';
+import dataManager, { RequestPriority } from '../../services/dataManager';
 import { useDeleteConfirmation } from '../../hooks/useDeleteConfirmation';
 
 export const MyForumPostsScreen: React.FC = () => {
@@ -32,6 +32,12 @@ export const MyForumPostsScreen: React.FC = () => {
     priority: RequestPriority.HIGH,
     enabled: !!user,
   });
+
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh])
+  );
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -49,6 +55,12 @@ export const MyForumPostsScreen: React.FC = () => {
     refresh();
   };
 
+  const invalidateForumCaches = useCallback(() => {
+    dataManager.invalidateCache(new RegExp(`^user:forum:posts:${user?.id || ''}`));
+    dataManager.invalidateCache(/^home:forum/);
+    dataManager.invalidateCache(/^explore:forum/);
+  }, [user?.id]);
+
   const handleDeletePost = useCallback(
     async (post: ForumPostWithUser) => {
       const confirmed = await confirmDelete({
@@ -64,13 +76,21 @@ export const MyForumPostsScreen: React.FC = () => {
 
       try {
         await forumService.deletePost(post.id);
+        invalidateForumCaches();
         await refresh();
       } catch (error) {
         console.error('Failed to delete post', error);
         Alert.alert('Delete failed', 'Unable to delete post. Please try again.');
       }
     },
-    [confirmDelete, refresh]
+    [confirmDelete, invalidateForumCaches, refresh]
+  );
+
+  const handleEditPost = useCallback(
+    (post: ForumPostWithUser) => {
+      navigation.navigate('CreateForumPost', { postToEdit: post });
+    },
+    [navigation]
   );
 
   return (
@@ -103,7 +123,7 @@ export const MyForumPostsScreen: React.FC = () => {
                   post={item}
                   onPress={() => handlePostPress(item)}
                   mode="owner"
-                  onEdit={() => Alert.alert('Edit', 'Edit post coming soon.')}
+                  onEdit={() => handleEditPost(item)}
                   onDelete={() => handleDeletePost(item)}
                   containerStyle={styles.cardFullWidth}
                 />

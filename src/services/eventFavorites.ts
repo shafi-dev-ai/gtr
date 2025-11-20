@@ -14,15 +14,66 @@ class EventFavoritesService {
     if (!user) throw new Error('User not authenticated');
 
     const { data, error } = await supabase
-      .rpc('get_user_favorite_events', {
-        p_user_id: user.id,
-        p_limit: limit,
-        p_offset: offset,
-      });
+      .from('event_favorites')
+      .select(
+        `
+        favorited_at:created_at,
+        event:events!event_favorites_event_id_fkey (
+          *,
+          event_images (*)
+        )
+      `
+      )
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (error) throw error;
 
-    return (data || []) as FavoriteEvent[];
+    const favorites: FavoriteEvent[] = (data || [])
+      .map((row: any) => {
+        const event = row.event;
+        if (!event) return null;
+        const mapped: FavoriteEvent = {
+          ...(event as EventWithCreator),
+          favorited_at: row.favorited_at,
+          event_images: Array.isArray(event.event_images) ? event.event_images : [],
+        };
+        return mapped;
+      })
+      .filter((event): event is FavoriteEvent => Boolean(event));
+
+    if (!favorites.length) {
+      return [];
+    }
+
+    const creatorIds = Array.from(new Set(favorites.map(event => event.created_by).filter(Boolean)));
+    if (creatorIds.length) {
+      const { data: creators } = await supabase
+        .from('profiles')
+        .select('id, username, full_name, avatar_url')
+        .in('id', creatorIds);
+
+      const creatorMap = new Map(
+        (creators || []).map(profile => [
+          profile.id,
+          {
+            username: profile.username,
+            full_name: profile.full_name,
+            avatar_url: profile.avatar_url,
+          },
+        ])
+      );
+
+      favorites.forEach(event => {
+        const profile = creatorMap.get(event.created_by);
+        if (profile) {
+          event.profiles = profile;
+        }
+      });
+    }
+
+    return favorites;
   }
 
   /**
@@ -192,4 +243,3 @@ class EventFavoritesService {
 }
 
 export const eventFavoritesService = new EventFavoritesService();
-

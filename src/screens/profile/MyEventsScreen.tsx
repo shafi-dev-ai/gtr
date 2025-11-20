@@ -10,7 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { eventsService } from '../../services/events';
@@ -34,6 +34,12 @@ export const MyEventsScreen: React.FC = () => {
     enabled: !!user,
   });
 
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh])
+  );
+
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     await refresh();
@@ -53,6 +59,7 @@ export const MyEventsScreen: React.FC = () => {
   const invalidateEventCaches = useCallback(() => {
     dataManager.invalidateCache(new RegExp(`^user:events:${user?.id || ''}`));
     dataManager.invalidateCache(/^home:events/);
+    dataManager.invalidateCache(/^explore:events/);
   }, [user?.id]);
 
   const handleDeleteEvent = useCallback(
@@ -84,12 +91,12 @@ export const MyEventsScreen: React.FC = () => {
     [confirmDelete, invalidateEventCaches, refresh]
   );
 
-  const handleEditEvent = (event: EventWithCreator) => {
-    Alert.alert(
-      'Edit Event',
-      'Editing events will be available soon. For now, please contact support to make changes.'
-    );
-  };
+  const handleEditEvent = useCallback(
+    (event: EventWithCreator) => {
+      navigation.navigate('CreateEvent', { eventToEdit: event });
+    },
+    [navigation]
+  );
 
   return (
     <>

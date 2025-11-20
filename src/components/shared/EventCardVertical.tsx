@@ -52,7 +52,10 @@ export const EventCardVertical: React.FC<EventCardVerticalProps> = ({
     });
   };
 
-  const coverImage = event.cover_image_url || 'https://picsum.photos/800/600';
+  const coverImage =
+    event.event_images?.find((img) => img.is_primary)?.image_url ||
+    event.event_images?.[0]?.image_url ||
+    'https://picsum.photos/800/600';
 
   return (
     <TouchableOpacity style={styles.card} activeOpacity={0.9} onPress={onPress}>

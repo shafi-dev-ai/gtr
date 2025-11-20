@@ -19,13 +19,14 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { storageService } from '../../services/storage';
 import { forumService } from '../../services/forum';
 import dataManager from '../../services/dataManager';
 import { supabase } from '../../services/supabase';
 import { GTR_MODEL_OPTIONS } from '../../constants/listingOptions';
+import { ForumPostWithUser } from '../../types/forum.types';
 
 const MAX_PHOTOS = 12;
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024;
@@ -34,6 +35,10 @@ interface LocalPhoto {
   id: string;
   uri: string;
   type: string;
+}
+
+interface CreateForumPostRouteParams {
+  postToEdit?: ForumPostWithUser | null;
 }
 
 const base64ToUint8Array = (base64String: string): Uint8Array => {
@@ -72,13 +77,19 @@ const base64ToUint8Array = (base64String: string): Uint8Array => {
 
 export const CreateForumPostScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const route = useRoute();
+  const routeParams = route?.params as CreateForumPostRouteParams | undefined;
+  const editingPost = routeParams?.postToEdit || null;
+  const isEditing = !!editingPost;
   const { user } = useAuth();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [selectedModelKey, setSelectedModelKey] = useState<string | null>(GTR_MODEL_OPTIONS[0]?.value || null);
   const [photos, setPhotos] = useState<LocalPhoto[]>([]);
+  const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const totalPhotoCount = existingImageUrls.length + photos.length;
 
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -89,8 +100,20 @@ export const CreateForumPostScreen: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!editingPost) {
+      setExistingImageUrls([]);
+      return;
+    }
+    setSelectedModelKey(editingPost.model || GTR_MODEL_OPTIONS[0]?.value || null);
+    setTitle(editingPost.title || '');
+    setContent(editingPost.content || '');
+    setExistingImageUrls(editingPost.image_urls || []);
+    setPhotos([]);
+  }, [editingPost]);
+
   const showPhotoActionSheet = () => {
-    if (photos.length >= MAX_PHOTOS) {
+    if (totalPhotoCount >= MAX_PHOTOS) {
       Alert.alert('Photo limit reached', `You can upload up to ${MAX_PHOTOS} photos.`);
       return;
     }
@@ -120,7 +143,7 @@ export const CreateForumPostScreen: React.FC = () => {
         Alert.alert('Permission required', 'Please grant media access to add photos.');
         return;
       }
-      const remainingSlots = MAX_PHOTOS - photos.length;
+      const remainingSlots = MAX_PHOTOS - totalPhotoCount;
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsMultipleSelection: true,
@@ -128,12 +151,16 @@ export const CreateForumPostScreen: React.FC = () => {
         quality: 0.8,
       });
       if (result.canceled || !result.assets?.length) return;
-      const newPhotos = result.assets.map((asset) => ({
+      const newPhotos = result.assets.slice(0, remainingSlots).map((asset) => ({
         id: `${Date.now()}-${asset.assetId || Math.random()}`,
         uri: asset.uri,
         type: asset.type || 'image/jpeg',
       }));
-      setPhotos((prev) => [...prev, ...newPhotos].slice(0, MAX_PHOTOS));
+      setPhotos((prev) => {
+        const allowed = MAX_PHOTOS - existingImageUrls.length;
+        const combined = [...prev, ...newPhotos];
+        return combined.slice(0, allowed);
+      });
     } catch (error) {
       console.error('handlePickPhoto error', error);
       Alert.alert('Unable to select photos', 'Please try again.');
@@ -142,9 +169,17 @@ export const CreateForumPostScreen: React.FC = () => {
 
   const handleTakePhoto = async () => {
     try {
+      if (totalPhotoCount >= MAX_PHOTOS) {
+        Alert.alert('Photo limit reached', `You can upload up to ${MAX_PHOTOS} photos.`);
+        return;
+      }
       const result = await storageService.takePhotoWithCamera();
       if (!result) return;
-      setPhotos((prev) => [...prev, { id: `${Date.now()}`, uri: result.uri, type: result.type }].slice(0, MAX_PHOTOS));
+      setPhotos((prev) => {
+        const allowed = MAX_PHOTOS - existingImageUrls.length;
+        const updated = [...prev, { id: `${Date.now()}`, uri: result.uri, type: result.type }];
+        return updated.slice(0, allowed);
+      });
     } catch (error) {
       console.error('handleTakePhoto error', error);
       Alert.alert('Unable to take photo', 'Please try again.');
@@ -153,6 +188,10 @@ export const CreateForumPostScreen: React.FC = () => {
 
   const handleRemovePhoto = (photoId: string) => {
     setPhotos((prev) => prev.filter((photo) => photo.id !== photoId));
+  };
+
+  const handleRemoveExistingImage = (url: string) => {
+    setExistingImageUrls((prev) => prev.filter((item) => item !== url));
   };
 
   const prepareImageForUpload = async (uri: string) => {
@@ -193,7 +232,7 @@ export const CreateForumPostScreen: React.FC = () => {
     if (!selectedModelKey) return 'Select a GT-R model for your topic.';
     if (!title.trim()) return 'Add a descriptive title.';
     if (!content.trim()) return 'Share some content for your post.';
-    if (photos.length === 0) return 'Add at least one photo.';
+    if (existingImageUrls.length === 0 && photos.length === 0) return 'Add at least one photo.';
     return null;
   };
 
@@ -209,18 +248,35 @@ export const CreateForumPostScreen: React.FC = () => {
     }
     setIsSubmitting(true);
     try {
-      const imageUrls = await uploadForumPhotos();
-      await forumService.createPost({
-        model: selectedModelKey,
-        title: title.trim(),
-        content: content.trim(),
-        image_urls: imageUrls,
-      });
-      dataManager.invalidateCache(/^home:forum/);
-      dataManager.invalidateCache(/^user:forum/);
-      Alert.alert('Post published', 'Your thread is live!', [
-        { text: 'View later', onPress: () => navigation.goBack() },
-      ]);
+      const newImageUrls = photos.length ? await uploadForumPhotos() : [];
+      const combinedImageUrls = [...existingImageUrls, ...newImageUrls];
+      if (isEditing && editingPost) {
+        await forumService.updatePost(editingPost.id, {
+          model: selectedModelKey,
+          title: title.trim(),
+          content: content.trim(),
+          image_urls: combinedImageUrls,
+        });
+        dataManager.invalidateCache(/^home:forum/);
+        dataManager.invalidateCache(/^user:forum/);
+        dataManager.invalidateCache(/^explore:forum/);
+        Alert.alert('Post updated', 'Your changes are live!', [
+          { text: 'Done', onPress: () => navigation.goBack() },
+        ]);
+      } else {
+        await forumService.createPost({
+          model: selectedModelKey,
+          title: title.trim(),
+          content: content.trim(),
+          image_urls: combinedImageUrls,
+        });
+        dataManager.invalidateCache(/^home:forum/);
+        dataManager.invalidateCache(/^user:forum/);
+        dataManager.invalidateCache(/^explore:forum/);
+        Alert.alert('Post published', 'Your thread is live!', [
+          { text: 'View later', onPress: () => navigation.goBack() },
+        ]);
+      }
     } catch (error: any) {
       console.error('Forum post creation failed', error);
       Alert.alert('Unable to publish', error?.message || 'Please try again.');
@@ -230,8 +286,25 @@ export const CreateForumPostScreen: React.FC = () => {
   };
 
   const renderPhotoGrid = () => {
+    if (totalPhotoCount === 0) {
+      return (
+        <TouchableOpacity style={styles.photoPlaceholder} onPress={showPhotoActionSheet} activeOpacity={0.8}>
+          <Ionicons name="add" size={34} color="#C7CAD7" />
+          <Text style={styles.photoPlaceholderText}>Add photos</Text>
+          <Text style={styles.photoHint}>Up to {MAX_PHOTOS} images</Text>
+        </TouchableOpacity>
+      );
+    }
     return (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoRow}>
+        {existingImageUrls.map((url) => (
+          <View key={url} style={styles.photoItem}>
+            <Image source={{ uri: url }} style={styles.photoImage} contentFit="cover" />
+            <TouchableOpacity style={styles.removePhotoButton} onPress={() => handleRemoveExistingImage(url)}>
+              <Ionicons name="close" size={16} color="#181920" />
+            </TouchableOpacity>
+          </View>
+        ))}
         {photos.map((photo) => (
           <View key={photo.id} style={styles.photoItem}>
             <Image source={{ uri: photo.uri }} style={styles.photoImage} contentFit="cover" />
@@ -240,7 +313,7 @@ export const CreateForumPostScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
         ))}
-        {photos.length < MAX_PHOTOS && (
+        {totalPhotoCount < MAX_PHOTOS && (
           <TouchableOpacity style={styles.photoPlaceholderSmall} onPress={showPhotoActionSheet} activeOpacity={0.85}>
             <Ionicons name="add" size={30} color="#C7CAD7" />
           </TouchableOpacity>
@@ -269,7 +342,7 @@ export const CreateForumPostScreen: React.FC = () => {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Create Forum Post</Text>
+          <Text style={styles.headerTitle}>{isEditing ? 'Edit Forum Post' : 'Create Forum Post'}</Text>
           <View style={styles.headerPlaceholder} />
         </View>
 
@@ -335,10 +408,19 @@ export const CreateForumPostScreen: React.FC = () => {
           ) : (
             <Ionicons name="send" size={18} color="#181920" />
           )}
-          <Text style={styles.publishButtonText}>{isSubmitting ? 'Posting...' : 'Publish Post'}</Text>
+          <Text style={styles.publishButtonText}>
+            {isSubmitting ? (isEditing ? 'Updating...' : 'Posting...') : isEditing ? 'Update Post' : 'Publish Post'}
+          </Text>
         </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {isSubmitting && (
+        <View style={styles.blockingOverlay} pointerEvents="auto">
+          <ActivityIndicator size="large" color="#FFFFFF" />
+          <Text style={styles.blockingText}>{isEditing ? 'Updating post...' : 'Publishing post...'}</Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -525,6 +607,24 @@ const styles = StyleSheet.create({
     color: '#181A22',
     fontWeight: '600',
     fontSize: 16,
+  },
+  blockingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(19,20,28,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  blockingText: {
+    marginTop: 12,
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '500',
+    textAlign: 'center',
   },
   fieldError: {
     color: '#FF6B6B',

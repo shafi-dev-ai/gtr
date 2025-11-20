@@ -131,16 +131,29 @@ CREATE TABLE IF NOT EXISTS events (
   title TEXT NOT NULL,
   description TEXT,
   event_type TEXT NOT NULL,
-  location TEXT NOT NULL,
+  country TEXT,
+  state TEXT,
+  city TEXT,
+  location TEXT,
   latitude DECIMAL(10, 8),
   longitude DECIMAL(11, 8),
   start_date TIMESTAMP WITH TIME ZONE NOT NULL,
   end_date TIMESTAMP WITH TIME ZONE,
   rsvp_count INTEGER DEFAULT 0,
   max_attendees INTEGER,
-  cover_image_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Event Images Table
+CREATE TABLE IF NOT EXISTS event_images (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  event_id UUID REFERENCES events(id) ON DELETE CASCADE NOT NULL,
+  image_url TEXT NOT NULL,
+  storage_path TEXT NOT NULL,
+  is_primary BOOLEAN DEFAULT FALSE,
+  display_order INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- 9. Event RSVPs Table
@@ -397,6 +410,8 @@ CREATE INDEX IF NOT EXISTS idx_events_event_type ON events(event_type);
 CREATE INDEX IF NOT EXISTS idx_events_created_by ON events(created_by);
 CREATE INDEX IF NOT EXISTS idx_events_location ON events(location);
 CREATE INDEX IF NOT EXISTS idx_events_upcoming ON events(start_date) WHERE start_date > NOW();
+CREATE INDEX IF NOT EXISTS idx_event_images_event_id ON event_images(event_id);
+CREATE INDEX IF NOT EXISTS idx_event_images_display_order ON event_images(event_id, display_order);
 
 -- Event RSVPs indexes
 CREATE INDEX IF NOT EXISTS idx_event_rsvps_event_id ON event_rsvps(event_id);
@@ -541,6 +556,31 @@ ALTER TABLE events ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Events are viewable by everyone" ON events FOR SELECT USING (true);
 CREATE POLICY "Authenticated users can create events" ON events FOR INSERT TO authenticated WITH CHECK (auth.uid() = created_by);
 CREATE POLICY "Event creators can update their events" ON events FOR UPDATE USING (auth.uid() = created_by);
+CREATE POLICY "Event creators can delete their events" ON events FOR DELETE USING (auth.uid() = created_by);
+
+ALTER TABLE event_images ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Event images are viewable by everyone" ON event_images FOR SELECT USING (true);
+CREATE POLICY "Event creators can add images" ON event_images FOR INSERT TO authenticated WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM events e
+    WHERE e.id = event_images.event_id
+      AND e.created_by = auth.uid()
+  )
+);
+CREATE POLICY "Event creators can update images" ON event_images FOR UPDATE USING (
+  EXISTS (
+    SELECT 1 FROM events e
+    WHERE e.id = event_images.event_id
+      AND e.created_by = auth.uid()
+  )
+);
+CREATE POLICY "Event creators can delete images" ON event_images FOR DELETE USING (
+  EXISTS (
+    SELECT 1 FROM events e
+    WHERE e.id = event_images.event_id
+      AND e.created_by = auth.uid()
+  )
+);
 
 -- Event RSVPs Policies
 ALTER TABLE event_rsvps ENABLE ROW LEVEL SECURITY;
@@ -1214,10 +1254,10 @@ RETURNS TABLE (
   end_date TIMESTAMP WITH TIME ZONE,
   rsvp_count INTEGER,
   max_attendees INTEGER,
-  cover_image_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE,
   updated_at TIMESTAMP WITH TIME ZONE,
-  favorited_at TIMESTAMP WITH TIME ZONE
+  favorited_at TIMESTAMP WITH TIME ZONE,
+  event_images JSONB
 ) AS $$
 BEGIN
   RETURN QUERY
@@ -1234,10 +1274,28 @@ BEGIN
     e.end_date,
     e.rsvp_count,
     e.max_attendees,
-    e.cover_image_url,
     e.created_at,
     e.updated_at,
-    ef.created_at AS favorited_at
+    ef.created_at AS favorited_at,
+    COALESCE(
+      (
+        SELECT jsonb_agg(
+          jsonb_build_object(
+            'id', ei.id,
+            'event_id', ei.event_id,
+            'image_url', ei.image_url,
+            'storage_path', ei.storage_path,
+            'is_primary', ei.is_primary,
+            'display_order', ei.display_order,
+            'created_at', ei.created_at
+          )
+          ORDER BY ei.display_order, ei.created_at
+        )
+        FROM event_images ei
+        WHERE ei.event_id = e.id
+      ),
+      '[]'::jsonb
+    ) AS event_images
   FROM event_favorites ef
   INNER JOIN events e ON ef.event_id = e.id
   WHERE ef.user_id = p_user_id
@@ -1995,6 +2053,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE media_likes;
 ALTER PUBLICATION supabase_realtime ADD TABLE media_comments;
 ALTER PUBLICATION supabase_realtime ADD TABLE listing_favorites;
 ALTER PUBLICATION supabase_realtime ADD TABLE event_favorites;
+ALTER PUBLICATION supabase_realtime ADD TABLE event_images;
 ALTER PUBLICATION supabase_realtime ADD TABLE comment_likes;
 ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
 

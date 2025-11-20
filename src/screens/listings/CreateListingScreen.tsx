@@ -406,7 +406,6 @@ export const CreateListingScreen: React.FC = () => {
     if (!selectedCountry) return 'Select a country.';
     if (!selectedState) return 'Select a state or region.';
     if (!city.trim()) return 'Enter a city.';
-    if (!zipCode.trim()) return 'Enter a zip/postal code.';
     if (totalPhotoCount === 0) return 'Add at least one photo.';
     return null;
   };
@@ -494,7 +493,7 @@ export const CreateListingScreen: React.FC = () => {
         state: selectedState?.code,
         city: city.trim(),
         street_address: trimmedStreetAddress || null,
-        zip_code: zipCode.trim(),
+        zip_code: zipCode.trim() || null,
         location,
       };
 
@@ -852,7 +851,7 @@ export const CreateListingScreen: React.FC = () => {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.label}>Zip Code</Text>
+            <Text style={styles.label}>Zip Code (optional)</Text>
             <TextInput
               style={styles.input}
               placeholder="Enter postal code"

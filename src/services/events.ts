@@ -8,20 +8,64 @@ import {
   UpdateRSVPData,
 } from '../types/event.types';
 
+const attachCreatorProfiles = async (events: EventWithCreator[]): Promise<EventWithCreator[]> => {
+  if (!events?.length) return [];
+
+  const creatorIds = Array.from(new Set(events.map(event => event.created_by).filter(Boolean)));
+  if (!creatorIds.length) {
+    return events.map(event => ({ ...event, profiles: event.profiles || null }));
+  }
+
+  const { data: profiles, error } = await supabase
+    .from('profiles')
+    .select('id, username, full_name, avatar_url')
+    .in('id', creatorIds);
+
+  if (error) throw error;
+
+  const profileMap = new Map(
+    (profiles || []).map(profile => [
+      profile.id,
+      {
+        username: profile.username,
+        full_name: profile.full_name,
+        avatar_url: profile.avatar_url,
+      },
+    ])
+  );
+
+  return events.map(event => ({
+    ...event,
+    event_images: event.event_images || [],
+    profiles: profileMap.get(event.created_by) || null,
+  }));
+};
+
 export const eventsService = {
   /**
    * Get all upcoming events (optimized - only fetches required fields)
-   */
+  */
   async getUpcomingEvents(limit: number = 50): Promise<EventWithCreator[]> {
+    const now = new Date();
+    const toleranceMs = 2 * 60 * 60 * 1000; // include events that started within last 2 hours
+    const startThreshold = new Date(now.getTime() - toleranceMs).toISOString();
+
     const { data, error } = await supabase
       .from('events')
-      .select('id, created_by, title, description, event_type, location, start_date, end_date, rsvp_count, cover_image_url, created_at')
-      .gte('start_date', new Date().toISOString())
+      .select(
+        `
+        *,
+        event_images (*)
+      `
+      )
+      .gte('start_date', startThreshold)
       .order('start_date', { ascending: true })
+      .order('display_order', { foreignTable: 'event_images', ascending: true })
       .limit(limit);
 
     if (error) throw error;
-    return (data || []) as EventWithCreator[];
+    const events = (data || []) as EventWithCreator[];
+    return attachCreatorProfiles(events);
   },
 
   /**
@@ -33,18 +77,16 @@ export const eventsService = {
       .select(
         `
         *,
-        profiles:created_by (
-          username,
-          full_name,
-          avatar_url
-        )
+        event_images (*)
       `
       )
       .order('start_date', { ascending: false })
+      .order('display_order', { foreignTable: 'event_images', ascending: true })
       .limit(limit);
 
     if (error) throw error;
-    return data || [];
+    const events = (data || []) as EventWithCreator[];
+    return attachCreatorProfiles(events);
   },
 
   /**
@@ -56,55 +98,38 @@ export const eventsService = {
       .select(
         `
         *,
-        profiles:created_by (
-          username,
-          full_name,
-          avatar_url
-        )
+        event_images (*)
       `
       )
       .eq('id', eventId)
+      .order('display_order', { foreignTable: 'event_images', ascending: true })
       .single();
 
     if (error) throw error;
-    return data;
+    if (!data) return null;
+    const [eventWithProfile] = await attachCreatorProfiles([data as EventWithCreator]);
+    return eventWithProfile || null;
   },
 
   /**
    * Get events created by a user (optimized - only fetches required fields)
    */
   async getUserEvents(userId: string): Promise<EventWithCreator[]> {
-    // Fetch events without creator profile join first (only required fields)
-    const { data: events, error: eventsError } = await supabase
+    const { data, error } = await supabase
       .from('events')
-      .select('id, created_by, title, description, event_type, location, start_date, end_date, rsvp_count, cover_image_url, created_at')
+      .select(
+        `
+        *,
+        event_images (*)
+      `
+      )
       .eq('created_by', userId)
-      .order('start_date', { ascending: false });
+      .order('start_date', { ascending: false })
+      .order('display_order', { foreignTable: 'event_images', ascending: true });
 
-    if (eventsError) throw eventsError;
-    if (!events || events.length === 0) return [];
-
-    // Fetch creator profiles separately
-    const creatorIds = [...new Set(events.map(event => event.created_by))];
-    const { data: profiles, error: profilesError } = await supabase
-      .from('profiles')
-      .select('id, username, full_name, avatar_url')
-      .in('id', creatorIds);
-
-    if (profilesError) throw profilesError;
-
-    // Combine events with profiles
-    return events.map(event => {
-      const profile = profiles?.find(p => p.id === event.created_by);
-      return {
-        ...event,
-        profiles: profile ? {
-          username: profile.username,
-          full_name: profile.full_name,
-          avatar_url: profile.avatar_url,
-        } : undefined,
-      };
-    }) as EventWithCreator[];
+    if (error) throw error;
+    const events = (data || []) as EventWithCreator[];
+    return attachCreatorProfiles(events);
   },
 
   /**
@@ -299,29 +324,39 @@ export const eventsService = {
    * Delete an event (only by creator)
    */
   async deleteEvent(eventId: string): Promise<void> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
 
-    // Verify user is the creator
-    const { data: event, error: fetchError } = await supabase
-      .from('events')
-      .select('created_by')
-      .eq('id', eventId)
-      .single();
-
-    if (fetchError) throw fetchError;
-    if (!event) throw new Error('Event not found');
-    if (event.created_by !== user.id) {
-      throw new Error('Only the event creator can delete this event');
-    }
-
-    // Delete the event (cascade will delete RSVPs)
     const { error } = await supabase
       .from('events')
       .delete()
-      .eq('id', eventId);
+      .eq('id', eventId)
+      .eq('created_by', user.id);
 
     if (error) throw error;
   },
-};
 
+  /**
+   * Update an event (only by creator)
+   */
+  async updateEvent(eventId: string, updates: Partial<CreateEventData>): Promise<Event> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    const { data, error } = await supabase
+      .from('events')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', eventId)
+      .eq('created_by', user.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+};

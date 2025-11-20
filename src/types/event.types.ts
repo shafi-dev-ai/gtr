@@ -1,4 +1,14 @@
 // Event Types
+export interface EventImage {
+  id: string;
+  event_id: string;
+  image_url: string;
+  storage_path: string;
+  is_primary: boolean;
+  display_order: number;
+  created_at: string;
+}
+
 export interface Event {
   id: string;
   created_by: string;
@@ -6,15 +16,18 @@ export interface Event {
   description: string | null;
   event_type: string;
   location: string;
+  country: string | null;
+  state: string | null;
+  city: string | null;
   latitude: number | null;
   longitude: number | null;
   start_date: string;
   end_date: string | null;
   rsvp_count: number;
   max_attendees: number | null;
-  cover_image_url: string | null;
   created_at: string;
   updated_at: string;
+  event_images?: EventImage[];
 }
 
 export interface EventWithCreator extends Event {
@@ -48,15 +61,16 @@ export interface CreateEventData {
   description?: string;
   event_type: string;
   location: string;
+  country?: string | null;
+  state?: string | null;
+  city?: string;
   latitude?: number;
   longitude?: number;
   start_date: string;
   end_date?: string;
   max_attendees?: number;
-  cover_image_url?: string;
 }
 
 export interface UpdateRSVPData {
   status: 'going' | 'maybe' | 'not_going';
 }
-

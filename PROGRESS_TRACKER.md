@@ -474,3 +474,47 @@ npm start
 
 **Date**: Day 9 - Explore Tab & Forum System Stabilization  
 **Status**: Explore delivers vertical event/forum feeds with shared card components, attendee data, and synchronized like/comment counts backed by updated Supabase RLS + trigger logic.
+
+---
+
+## Day 10 - Event Media, Splash Polish & Supabase Hardening
+
+### Completed
+
+- ✅ **Event media pipeline upgrade**
+  - Removed `cover_image_url` from the app and Supabase functions; events now persist photos exclusively through `event_images` (ordered, primary-aware).
+  - Rebuilt `CreateEventScreen` with the listing photo manager: add/remove up to 12 images, delete existing images (storage + table), maintain cover indicator, and block submission until a photo exists.
+  - Editing an event now keeps existing images, appends new uploads with proper `display_order`, and invalidates caches + refreshes feeds instantly after save.
+- ✅ **Frontend consumers updated**
+  - `EventCard` + `EventCardVertical` now render the primary/first entry from `event_images`.
+  - Home `EventsSection`, Explore events list, “My Events”, liked events, and the favorites context all consume the new event shape and rehydrate creator profiles after fetch.
+  - Added owner-focused cache invalidation + forced refresh so newly created/edited events surface immediately for you and other users.
+- ✅ **Listing form polish**
+  - Street address and ZIP/postal inputs are now optional; payloads persist `null` when the seller omits them.
+  - Validation, payload building, and location formatting updated so partial address data no longer blocks publishing.
+- ✅ **Supabase + services**
+  - `docs/setup_complete.sql` adds the `event_images` table, triggers, and updated `get_user_favorite_events` RPC so migrations run cleanly on fresh environments.
+  - `eventsService` no longer relies on implicit profile joins (which broke after the schema change); it fetches profiles separately and adds a 2‑hour grace window so just-started events still appear in Home/Explore.
+  - `eventFavoritesService` now joins through the FK (`event_favorites_event_id_fkey`) and manually rehydrates creator profiles, eliminating the `PGRST200` errors.
+- ✅ **Brand splash & loader**
+  - Introduced `BrandSplash` showing the centered `logo.svg`, tuned loader placement, and enforced a minimum splash duration while the app initializes.
+
+### Important Files
+
+- `src/screens/events/CreateEventScreen.tsx`
+- `src/components/shared/EventCard.tsx`, `src/components/shared/EventCardVertical.tsx`
+- `src/services/events.ts`, `src/services/eventFavorites.ts`
+- `src/context/FavoritesContext.tsx`
+- `src/components/common/BrandSplash.tsx`, `App.js`
+- `docs/setup_complete.sql`, `docs/seed_data.sql`
+
+### Notes
+
+- Multi-photo events now match listing parity—storage cleanup, ordering, and cache invalidation behave the same across surfaces.
+- Favorites + explore feeds no longer break when old RPCs expect `cover_image_url`; all Supabase scripts in `docs/setup_complete.sql` are up to date with triggers/policies for forums and events.
+- Home/Explore use a helper (`attachCreatorProfiles`) so profile lookups stay consistent even though `events.created_by` references `auth.users`.
+
+## Last Updated
+
+**Date**: Day 10 - Event Media, Splash Polish & Supabase Hardening  
+**Status**: Event creation/editing, feeds, and favorites all honor the new multi-photo event schema; splash + Supabase scripts were tightened so fresh environments and existing users stay in sync.

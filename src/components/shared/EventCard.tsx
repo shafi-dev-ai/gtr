@@ -81,7 +81,10 @@ export const EventCard: React.FC<EventCardProps> = ({
     return parts.length > 1 ? `${parts[0]}, ${parts[1]}` : location;
   };
 
-  const coverImage = event.cover_image_url || 'https://picsum.photos/800/600';
+  const coverImage =
+    event.event_images?.find((img) => img.is_primary)?.image_url ||
+    event.event_images?.[0]?.image_url ||
+    'https://picsum.photos/800/600';
 
   return (
     <TouchableOpacity
