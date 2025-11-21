@@ -7,6 +7,7 @@ import { CommentCard } from './CommentCard';
 import { realtimeService } from '../../services/realtime';
 import { RateLimiter } from '../../utils/throttle';
 import { useFavorites } from '../../context/FavoritesContext';
+import { FALLBACK_CARD, pickImageSource } from '../../utils/imageFallbacks';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - 48; // Screen width minus padding
@@ -113,7 +114,8 @@ export const ForumPostCard: React.FC<ForumPostCardProps> = ({
 
   const primaryImage = post.image_urls && post.image_urls.length > 0 
     ? post.image_urls[0] 
-    : 'https://picsum.photos/800/600';
+    : null;
+  const primarySource = pickImageSource(primaryImage, FALLBACK_CARD);
 
   return (
     <View style={[styles.container, containerStyle]}>
@@ -124,7 +126,7 @@ export const ForumPostCard: React.FC<ForumPostCardProps> = ({
         {/* Post Image */}
         <View style={styles.imageContainer}>
           <Image
-            source={{ uri: primaryImage }}
+            source={primarySource}
             style={styles.postImage}
             contentFit="cover"
           />

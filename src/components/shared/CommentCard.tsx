@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ForumCommentWithUser } from '../../types/forum.types';
+import { FALLBACK_AVATAR, pickAvatarSource } from '../../utils/imageFallbacks';
 
 interface CommentCardProps {
   comment: ForumCommentWithUser;
@@ -25,13 +26,14 @@ export const CommentCard: React.FC<CommentCardProps> = ({
     return `${Math.floor(diffInSeconds / 604800)} weeks ago`;
   };
 
-  const avatarUrl = comment.profiles?.avatar_url || 'https://picsum.photos/100/100';
+  const avatarUrl = comment.profiles?.avatar_url || null;
+  const avatarSource = pickAvatarSource(avatarUrl);
   const username = comment.profiles?.username || comment.profiles?.full_name || 'Anonymous';
 
   return (
     <View style={styles.container}>
       <Image
-        source={{ uri: avatarUrl }}
+        source={avatarSource}
         style={styles.avatar}
         contentFit="cover"
       />
@@ -106,4 +108,3 @@ const styles = StyleSheet.create({
     color: '#808080',
   },
 });
-

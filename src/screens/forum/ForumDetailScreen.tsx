@@ -27,6 +27,7 @@ import { useFavorites } from '../../context/FavoritesContext';
 import { RateLimiter } from '../../utils/throttle';
 import { profilesService } from '../../services/profiles';
 import { Dimensions } from 'react-native';
+import { FALLBACK_HERO, FALLBACK_AVATAR, pickAvatarSource, pickImageSource } from '../../utils/imageFallbacks';
 
 interface ForumDetailRouteParams {
   postId: string;
@@ -44,7 +45,6 @@ interface CommentItem extends ForumCommentWithUser {
 const PAGE_SIZE = 20;
 const REPLY_PAGE_SIZE = 20;
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const FALLBACK_IMAGE = 'https://picsum.photos/1200/800';
 
 const timeAgo = (dateString?: string) => {
   if (!dateString) return '';
@@ -383,10 +383,10 @@ export const ForumDetailScreen: React.FC = () => {
       <View style={styles.commentCard}>
         <View style={styles.commentHeader}>
           <View style={styles.commentAuthorRow}>
-            <Image
-              source={{ uri: item.profiles?.avatar_url || 'https://picsum.photos/200' }}
-              style={styles.commentAvatar}
-            />
+              <Image
+                source={pickAvatarSource(item.profiles?.avatar_url)}
+                style={styles.commentAvatar}
+              />
             <View style={{ flex: 1 }}>
               <Text style={styles.commentAuthor} numberOfLines={1}>
                 {item.profiles?.username || 'Member'}
@@ -430,10 +430,10 @@ export const ForumDetailScreen: React.FC = () => {
                   <View style={styles.replyContent}>
                     <View style={styles.commentHeader}>
                       <View style={styles.commentAuthorRow}>
-                        <Image
-                          source={{ uri: reply.profiles?.avatar_url || 'https://picsum.photos/200' }}
-                          style={styles.replyAvatar}
-                        />
+                      <Image
+                        source={pickAvatarSource(reply.profiles?.avatar_url)}
+                        style={styles.replyAvatar}
+                      />
                         <View style={{ flex: 1 }}>
                           <Text style={styles.commentAuthor} numberOfLines={1}>
                             {reply.profiles?.username || 'Member'}
@@ -495,7 +495,7 @@ export const ForumDetailScreen: React.FC = () => {
         </View>
       );
     }
-    const heroImages = currentPost.image_urls?.length ? currentPost.image_urls : [FALLBACK_IMAGE];
+    const heroImages = currentPost.image_urls?.length ? currentPost.image_urls : [null];
     return (
       <View style={styles.postCard}>
         <View style={styles.postImageWrapper}>
@@ -514,7 +514,7 @@ export const ForumDetailScreen: React.FC = () => {
             }}
             scrollEventThrottle={16}
             renderItem={({ item }) => (
-              <Image source={{ uri: item }} style={styles.postImage} contentFit="cover" />
+              <Image source={pickImageSource(item, FALLBACK_HERO)} style={styles.postImage} contentFit="cover" />
             )}
             onMomentumScrollEnd={(e) => {
               const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
@@ -529,7 +529,7 @@ export const ForumDetailScreen: React.FC = () => {
           {postAuthor && (
             <View style={styles.heroAuthor}>
               <Image
-                source={{ uri: postAuthor.avatar_url || 'https://picsum.photos/200' }}
+                source={pickAvatarSource(postAuthor.avatar_url)}
                 style={styles.heroAuthorAvatar}
               />
               <Text style={styles.heroAuthorName} numberOfLines={1}>

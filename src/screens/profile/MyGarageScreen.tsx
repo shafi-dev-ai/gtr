@@ -18,6 +18,7 @@ import { garageService } from '../../services/garage';
 import { UserGarage } from '../../types/garage.types';
 import { useDataFetch } from '../../hooks/useDataFetch';
 import { RequestPriority } from '../../services/dataManager';
+import { pickImageSource, FALLBACK_CARD } from '../../utils/imageFallbacks';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - 32;
@@ -28,7 +29,8 @@ interface GarageCardProps {
 }
 
 const GarageCard: React.FC<GarageCardProps> = ({ item, onPress }) => {
-  const imageUrl = item.cover_image_url || 'https://picsum.photos/800/600';
+  const imageUrl = item.cover_image_url || null;
+  const imageSource = pickImageSource(imageUrl, FALLBACK_CARD);
   const displayName = item.nickname || `${item.model}${item.year ? ` ${item.year}` : ''}`;
 
   return (
@@ -38,7 +40,7 @@ const GarageCard: React.FC<GarageCardProps> = ({ item, onPress }) => {
       activeOpacity={0.9}
     >
       <ExpoImage
-        source={{ uri: imageUrl }}
+        source={imageSource}
         style={styles.garageImage}
         contentFit="cover"
       />

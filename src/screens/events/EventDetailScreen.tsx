@@ -23,6 +23,7 @@ import { eventsService } from '../../services/events';
 import { realtimeService } from '../../services/realtime';
 import { RateLimiter } from '../../utils/throttle';
 import { profilesService } from '../../services/profiles';
+import { FALLBACK_HERO, FALLBACK_AVATAR, pickImageSource, pickAvatarSource } from '../../utils/imageFallbacks';
 
 interface EventDetailRouteParams {
   eventId: string;
@@ -31,7 +32,6 @@ interface EventDetailRouteParams {
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_HEIGHT = SCREEN_WIDTH * 0.7;
-const FALLBACK_IMAGE = 'https://picsum.photos/1200/800';
 
 export const EventDetailScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -98,9 +98,9 @@ export const EventDetailScreen: React.FC = () => {
       const ordered = [...event.event_images].sort(
         (a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)
       );
-      return ordered.map((img) => img.image_url || FALLBACK_IMAGE);
+      return ordered.map((img) => img.image_url || null);
     }
-    return [FALLBACK_IMAGE];
+    return [null];
   }, [event?.event_images]);
 
   const invalidateEventCaches = useCallback(() => {
@@ -330,7 +330,7 @@ export const EventDetailScreen: React.FC = () => {
               showsHorizontalScrollIndicator={false}
               onMomentumScrollEnd={handleImageMomentum}
               renderItem={({ item }) => (
-                <Image source={{ uri: item }} style={styles.heroImage} contentFit="cover" />
+                <Image source={pickImageSource(item, FALLBACK_HERO)} style={styles.heroImage} contentFit="cover" />
               )}
               keyExtractor={(item, index) => `${item}-${index}`}
               ref={imageListRef}
@@ -382,11 +382,7 @@ export const EventDetailScreen: React.FC = () => {
             <View style={styles.organizerCard}>
               <View style={styles.organizerRow}>
                 <View style={styles.organizerAvatar}>
-                  {event.profiles?.avatar_url ? (
-                    <Image source={{ uri: event.profiles.avatar_url }} style={styles.avatarImage} />
-                  ) : (
-                    <Ionicons name="person-circle-outline" size={36} color="#808080" />
-                  )}
+                  <Image source={pickAvatarSource(event.profiles?.avatar_url)} style={styles.avatarImage} />
                 </View>
                 <View style={styles.organizerInfo}>
                   <Text style={styles.organizerLabel}>Organized by</Text>

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'rea
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { EventWithCreator } from '../../types/event.types';
+import { FALLBACK_CARD, pickImageSource } from '../../utils/imageFallbacks';
 import { useFavorites } from '../../context/FavoritesContext';
 import { RateLimiter } from '../../utils/throttle';
 
@@ -55,12 +56,13 @@ export const EventCardVertical: React.FC<EventCardVerticalProps> = ({
   const coverImage =
     event.event_images?.find((img) => img.is_primary)?.image_url ||
     event.event_images?.[0]?.image_url ||
-    'https://picsum.photos/800/600';
+    null;
+  const coverSource = pickImageSource(coverImage, FALLBACK_CARD);
 
   return (
     <TouchableOpacity style={styles.card} activeOpacity={0.9} onPress={onPress}>
       <View style={styles.imageWrapper}>
-        <Image source={{ uri: coverImage }} style={styles.image} contentFit="cover" />
+        <Image source={coverSource} style={styles.image} contentFit="cover" />
 
         {!isOwner ? (
           <TouchableOpacity style={styles.favoriteButton} onPress={handleFavoritePress} activeOpacity={0.85}>

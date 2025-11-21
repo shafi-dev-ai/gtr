@@ -30,6 +30,7 @@ import { useDataFetch } from '../../hooks/useDataFetch';
 import dataManager, { RequestPriority } from '../../services/dataManager';
 import { RateLimiter } from '../../utils/throttle';
 import { openChatWithUser } from '../../utils/chatHelpers';
+import { FALLBACK_HERO, pickImageSource } from '../../utils/imageFallbacks';
 
 interface ListingDetailRouteParams {
   listingId: string;
@@ -38,7 +39,7 @@ interface ListingDetailRouteParams {
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_HEIGHT = SCREEN_WIDTH * 0.7;
-const FALLBACK_IMAGE = 'https://picsum.photos/1200/800';
+const FALLBACK_IMAGE = FALLBACK_HERO;
 
 export const ListingDetailScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -78,9 +79,9 @@ export const ListingDetailScreen: React.FC = () => {
       const ordered = [...listing.listing_images].sort(
         (a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)
       );
-      return ordered.map((img) => img.image_url || FALLBACK_IMAGE);
+      return ordered.map((img) => img.image_url || null);
     }
-    return [FALLBACK_IMAGE];
+    return [null];
   }, [listing?.listing_images]);
 
   const displayTitle =
@@ -329,7 +330,7 @@ export const ListingDetailScreen: React.FC = () => {
               showsHorizontalScrollIndicator={false}
               onMomentumScrollEnd={handleImageMomentum}
               renderItem={({ item }) => (
-                <Image source={{ uri: item }} style={styles.heroImage} contentFit="cover" />
+                <Image source={pickImageSource(item, FALLBACK_IMAGE)} style={styles.heroImage} contentFit="cover" />
               )}
               keyExtractor={(item, index) => `${item}-${index}`}
               ref={imageListRef}

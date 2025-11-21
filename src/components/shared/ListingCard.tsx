@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ListingWithImages } from '../../types/listing.types';
+import { FALLBACK_CARD, pickImageSource } from '../../utils/imageFallbacks';
 import { useFavorites } from '../../context/FavoritesContext';
 import { RateLimiter } from '../../utils/throttle';
 
@@ -34,9 +35,10 @@ export const ListingCard: React.FC<ListingCardProps> = ({
 
   const primaryImage = listing.listing_images?.find(img => img.is_primary)?.image_url 
     || listing.listing_images?.[0]?.image_url 
-    || 'https://picsum.photos/800/600';
+    || null;
+  const primarySource = pickImageSource(primaryImage, FALLBACK_CARD);
 
-  const images = listing.listing_images?.map(img => img.image_url) || [primaryImage];
+  const images = listing.listing_images?.map(img => img.image_url) || (primaryImage ? [primaryImage] : []);
   const location = listing.location || `${listing.city || ''}, ${listing.state || ''}`.trim() || 'Location not specified';
 
   const handleFavoritePress = async () => {
@@ -82,7 +84,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
       {/* Car Image */}
       <View style={styles.imageContainer}>
         <Image
-          source={{ uri: primaryImage }}
+          source={primarySource}
           style={styles.carImage}
           contentFit="cover"
         />

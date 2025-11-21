@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ForumPostWithUser } from '../../types/forum.types';
 import { useFavorites } from '../../context/FavoritesContext';
 import { RateLimiter } from '../../utils/throttle';
+import { FALLBACK_CARD, pickImageSource } from '../../utils/imageFallbacks';
 import { realtimeService } from '../../services/realtime';
 
 interface ForumPostCardVerticalProps {
@@ -48,11 +49,12 @@ export const ForumPostCardVertical: React.FC<ForumPostCardVerticalProps> = ({ po
     }
   };
 
-  const primaryImage = post.image_urls?.[0] || 'https://picsum.photos/800/600';
+  const primaryImage = post.image_urls?.[0] || null;
+  const primarySource = pickImageSource(primaryImage, FALLBACK_CARD);
 
   return (
     <TouchableOpacity style={styles.card} activeOpacity={0.9} onPress={onPress}>
-      <Image source={{ uri: primaryImage }} style={styles.image} contentFit="cover" />
+        <Image source={primarySource} style={styles.image} contentFit="cover" />
 
       <View style={styles.content}>
         <Text style={styles.title} numberOfLines={1}>

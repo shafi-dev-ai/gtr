@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
-import { Image, ImageProps } from 'expo-image';
+import { Image, ImageProps, ImageSource } from 'expo-image';
+import { FALLBACK_CARD } from '../../utils/imageFallbacks';
 
 interface OptimizedImageProps extends Omit<ImageProps, 'source'> {
-  source: string | { uri: string };
-  placeholder?: string;
-  fallback?: string;
+  source: string | { uri: string } | ImageSource;
+  placeholder?: ImageSource | string;
+  fallback?: ImageSource | string;
   priority?: 'low' | 'normal' | 'high';
 }
 
@@ -15,23 +16,29 @@ interface OptimizedImageProps extends Omit<ImageProps, 'source'> {
 export const OptimizedImage: React.FC<OptimizedImageProps> = ({
   source,
   placeholder,
-  fallback = 'https://picsum.photos/800/600',
+  fallback = FALLBACK_CARD,
   priority = 'normal',
   style,
   ...props
 }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
-  const [imageUri, setImageUri] = useState<string>('');
+  const [imageUri, setImageUri] = useState<string | ImageSource>('');
 
   useEffect(() => {
-    const uri = typeof source === 'string' ? source : source.uri;
-    setImageUri(uri);
+    let uri: string | ImageSource | undefined;
+    if (typeof source === 'string') {
+      uri = source;
+    } else if (source && typeof source === 'object' && 'uri' in source) {
+      uri = (source as any).uri;
+    } else {
+      uri = source;
+    }
+    setImageUri(uri as any);
     setIsLoading(true);
     setHasError(false);
 
-    // Preload image if high priority
-    if (priority === 'high' && uri) {
+    if (priority === 'high' && typeof uri === 'string' && uri) {
       Image.prefetch(uri).catch(() => {
         // Silently fail prefetch
       });
@@ -50,26 +57,24 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
   const handleError = () => {
     setIsLoading(false);
     setHasError(true);
-    if (imageUri !== fallback) {
-      setImageUri(fallback);
-    }
+    setImageUri(fallback as any);
   };
 
-  const displayUri = hasError ? fallback : imageUri;
+  const displaySource = hasError ? fallback : imageUri;
   const showPlaceholder = isLoading && placeholder;
 
   return (
     <View style={[styles.container, style]}>
       {showPlaceholder && (
         <Image
-          source={{ uri: placeholder }}
+          source={placeholder as any}
           style={[StyleSheet.absoluteFill, styles.placeholder]}
           contentFit="cover"
         />
       )}
       <Image
         {...props}
-        source={{ uri: displayUri }}
+        source={displaySource as any}
         style={[StyleSheet.absoluteFill, style]}
         onLoadStart={handleLoadStart}
         onLoadEnd={handleLoadEnd}
