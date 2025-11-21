@@ -25,6 +25,9 @@ export interface ForumComment {
   post_id: string;
   user_id: string;
   content: string;
+  parent_comment_id?: string | null;
+  reply_count?: number;
+  like_count?: number;
   created_at: string;
   updated_at: string;
 }
@@ -54,5 +57,12 @@ export interface CreateForumPostData {
 export interface CreateCommentData {
   post_id: string;
   content: string;
+  parent_comment_id?: string | null;
 }
 
+export interface CommentLike {
+  id: string;
+  comment_id: string;
+  user_id: string;
+  created_at: string;
+}

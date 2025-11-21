@@ -6,6 +6,7 @@ import {
   ForumCommentWithUser,
   CreateForumPostData,
   CreateCommentData,
+  CommentLike,
 } from '../types/forum.types';
 
 export const forumService = {
@@ -211,14 +212,26 @@ export const forumService = {
   /**
    * Get comments for a post (optimized - only fetches required fields)
    */
-  async getPostComments(postId: string, limit?: number): Promise<ForumCommentWithUser[]> {
-    // Fetch comments without profile join first (only required fields)
-    const { data: comments, error: commentsError } = await supabase
+  async getPostComments(
+    postId: string,
+    options?: { limit?: number; offset?: number; parentCommentId?: string | null }
+  ): Promise<ForumCommentWithUser[]> {
+    const { limit = 20, offset = 0, parentCommentId = null } = options || {};
+
+    let query = supabase
       .from('forum_comments')
-      .select('id, post_id, user_id, content, created_at, updated_at')
+      .select('id, post_id, user_id, content, parent_comment_id, reply_count, like_count, created_at, updated_at')
       .eq('post_id', postId)
-      .order('created_at', { ascending: true })
-      .limit(limit || 100);
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (parentCommentId === null) {
+      query = query.is('parent_comment_id', null);
+    } else {
+      query = query.eq('parent_comment_id', parentCommentId);
+    }
+
+    const { data: comments, error: commentsError } = await query;
 
     if (commentsError) throw commentsError;
     if (!comments || comments.length === 0) return [];
@@ -299,6 +312,7 @@ export const forumService = {
       .from('forum_comments')
       .insert({
         ...commentData,
+        parent_comment_id: commentData.parent_comment_id || null,
         user_id: user.id,
       })
       .select()
@@ -306,6 +320,75 @@ export const forumService = {
 
     if (error) throw error;
     return data;
+  },
+
+  /**
+   * Delete a comment (only by author)
+   */
+  async deleteComment(commentId: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    const { error } = await supabase
+      .from('forum_comments')
+      .delete()
+      .eq('id', commentId)
+      .eq('user_id', user.id);
+
+    if (error) throw error;
+  },
+
+  /**
+   * Like a comment
+   */
+  async likeComment(commentId: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    const { error } = await supabase
+      .from('comment_likes')
+      .insert({
+        comment_id: commentId,
+        user_id: user.id,
+      });
+
+    if (error && error.code !== '23505') {
+      throw error;
+    }
+  },
+
+  /**
+   * Unlike a comment
+   */
+  async unlikeComment(commentId: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    const { error } = await supabase
+      .from('comment_likes')
+      .delete()
+      .eq('comment_id', commentId)
+      .eq('user_id', user.id);
+
+    if (error && error.code !== 'PGRST116') throw error;
+  },
+
+  /**
+   * Get comment likes for specific comments by current user
+   */
+  async getUserCommentLikes(commentIds: string[]): Promise<string[]> {
+    if (!commentIds.length) return [];
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const { data, error } = await supabase
+      .from('comment_likes')
+      .select('comment_id')
+      .eq('user_id', user.id)
+      .in('comment_id', commentIds);
+
+    if (error) throw error;
+    return data?.map((row: CommentLike) => row.comment_id) || [];
   },
 
   /**

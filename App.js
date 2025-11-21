@@ -22,6 +22,7 @@ import { MyGarageScreen } from './src/screens/profile/MyGarageScreen';
 import { LikedListingsScreen } from './src/screens/profile/LikedListingsScreen';
 import { LikedEventsScreen } from './src/screens/profile/LikedEventsScreen';
 import { LikedForumPostsScreen } from './src/screens/profile/LikedForumPostsScreen';
+import { ForumDetailScreen } from './src/screens/forum/ForumDetailScreen';
 import { NotificationScreen } from './src/screens/notifications/NotificationScreen';
 import { conditionalStorage } from './src/services/sessionStorage';
 import { InboxScreen } from './src/screens/messages/InboxScreen';
@@ -76,6 +77,7 @@ const AppStack = () => {
       <Stack.Screen name="CreateEvent" component={CreateEventScreen} />
       <Stack.Screen name="EventDetail" component={EventDetailScreen} />
       <Stack.Screen name="CreateForumPost" component={CreateForumPostScreen} />
+      <Stack.Screen name="ForumDetail" component={ForumDetailScreen} />
     </Stack.Navigator>
   );
 };

@@ -46,8 +46,10 @@ export const MyForumPostsScreen: React.FC = () => {
   }, [refresh]);
 
   const handlePostPress = (post: ForumPostWithUser) => {
-    // TODO: Navigate to post detail
-    console.log('Post pressed:', post.id);
+    navigation.navigate('ForumDetail', {
+      postId: post.id,
+      initialPost: post,
+    });
   };
 
   const handleLike = () => {

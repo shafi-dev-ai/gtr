@@ -39,7 +39,10 @@ export const LikedForumPostsScreen: React.FC = () => {
   }, [refresh]);
 
   const handlePostPress = (post: ForumPostWithUser) => {
-    console.log('Liked forum post pressed:', post.id);
+    navigation.navigate('ForumDetail', {
+      postId: post.id,
+      initialPost: post,
+    });
   };
 
   useEffect(() => {

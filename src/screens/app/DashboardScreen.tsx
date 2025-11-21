@@ -156,9 +156,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
     updateExploreTab('events');
   };
 
-  const handlePostPress = (postId: string) => {
-    // TODO: Navigate to post detail screen
-    console.log('Post pressed:', postId);
+  const handlePostPress = (post: ForumPostWithUser) => {
+    if (!navigation) return;
+    navigation.navigate('ForumDetail', { postId: post.id, initialPost: post });
   };
 
   const handleForumSeeMorePress = () => {
@@ -537,7 +537,7 @@ const ExploreEventsList: React.FC<ExploreEventsListProps> = ({
 };
 
 interface ExploreForumListProps {
-  onPostPress?: (postId: string) => void;
+  onPostPress?: (post: ForumPostWithUser) => void;
   onRefreshReady?: (refreshFn: () => Promise<void>) => void;
 }
 
@@ -587,7 +587,7 @@ const ExploreForumList: React.FC<ExploreForumListProps> = ({
     <View style={styles.exploreListContainer}>
       {visiblePosts.map((post) => (
         <View style={styles.exploreCardWrapper} key={post.id}>
-          <ForumPostCardVertical post={post} onPress={() => onPostPress?.(post.id)} />
+          <ForumPostCardVertical post={post} onPress={() => onPostPress?.(post)} />
         </View>
       ))}
     </View>

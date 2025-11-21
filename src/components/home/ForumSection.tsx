@@ -18,7 +18,7 @@ interface PostWithComments extends ForumPostWithUser {
 }
 
 interface ForumSectionProps {
-  onPostPress?: (postId: string) => void;
+  onPostPress?: (post: ForumPostWithUser) => void;
   onSeeMorePress?: () => void;
   onRefreshReady?: (refreshFn: () => Promise<void>) => void;
 }
@@ -175,8 +175,8 @@ export const ForumSection: React.FC<ForumSectionProps> = ({
             commentText={post.commentText}
             onCommentTextChange={(text) => handleCommentTextChange(post.id, text)}
             onCommentSubmit={() => handleCommentSubmit(post.id)}
-            onPress={() => onPostPress?.(post.id)}
-            onComment={() => onPostPress?.(post.id)}
+            onPress={() => onPostPress?.(post)}
+            onComment={() => onPostPress?.(post)}
             onShare={() => {}}
             onReply={() => {}}
           />
