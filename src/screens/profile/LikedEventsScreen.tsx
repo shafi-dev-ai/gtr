@@ -57,8 +57,10 @@ export const LikedEventsScreen: React.FC = () => {
   }, [refresh, refreshEventFavorites]);
 
   const handleEventPress = (event: FavoriteEvent) => {
-    // TODO: Navigate to event detail
-    console.log('Event pressed:', event.id);
+    navigation.navigate('EventDetail', {
+      eventId: event.id,
+      initialEvent: event,
+    });
   };
 
   const handleFavorite = () => {

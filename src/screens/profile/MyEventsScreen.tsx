@@ -47,8 +47,10 @@ export const MyEventsScreen: React.FC = () => {
   }, [refresh]);
 
   const handleEventPress = (event: EventWithCreator) => {
-    // TODO: Navigate to event detail
-    console.log('Event pressed:', event.id);
+    navigation.navigate('EventDetail', {
+      eventId: event.id,
+      initialEvent: event,
+    });
   };
 
   const handleFavorite = () => {

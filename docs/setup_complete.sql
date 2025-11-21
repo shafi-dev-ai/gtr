@@ -999,20 +999,67 @@ BEGIN
 END;
 $$;
 
--- Function: Update RSVP count on events
+-- Function: Update RSVP count on events (counts only 'going'; runs as definer to bypass RLS)
 CREATE OR REPLACE FUNCTION update_event_rsvp_count()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  target_event UUID := COALESCE(NEW.event_id, OLD.event_id);
 BEGIN
-  IF TG_OP = 'INSERT' THEN
-    UPDATE events SET rsvp_count = rsvp_count + 1 WHERE id = NEW.event_id;
-    RETURN NEW;
+  UPDATE events e
+  SET rsvp_count = (
+    SELECT COUNT(*) FROM event_rsvps r
+    WHERE r.event_id = target_event
+      AND r.status = 'going'
+  )
+  WHERE e.id = target_event;
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+-- Function: Enforce event capacity (blocks RSVPs above max_attendees)
+CREATE OR REPLACE FUNCTION enforce_event_capacity()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  target_event UUID := COALESCE(NEW.event_id, OLD.event_id);
+  max_spots INTEGER;
+  current_going INTEGER;
+BEGIN
+  SELECT max_attendees INTO max_spots FROM events WHERE id = target_event;
+  IF max_spots IS NULL THEN
+    RETURN NEW; -- Open event
+  END IF;
+
+  SELECT COUNT(*) INTO current_going
+  FROM event_rsvps
+  WHERE event_id = target_event
+    AND status = 'going';
+
+  -- Account for status transitions
+  IF TG_OP = 'UPDATE' AND OLD.status != 'going' AND NEW.status = 'going' THEN
+    current_going := current_going + 1;
+  ELSIF TG_OP = 'INSERT' AND NEW.status = 'going' THEN
+    current_going := current_going + 1;
+  ELSIF TG_OP = 'UPDATE' AND OLD.status = 'going' AND NEW.status != 'going' THEN
+    RETURN NEW; -- Freeing a spot
   ELSIF TG_OP = 'DELETE' THEN
-    UPDATE events SET rsvp_count = rsvp_count - 1 WHERE id = OLD.event_id;
     RETURN OLD;
   END IF;
-  RETURN NULL;
+
+  IF current_going > max_spots THEN
+    RAISE EXCEPTION 'Event is full' USING ERRCODE = 'P0001';
+  END IF;
+
+  RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- Function: Update conversation on message
 CREATE OR REPLACE FUNCTION update_conversation_on_message()
@@ -2005,8 +2052,18 @@ CREATE TRIGGER update_comment_like_count_on_insert AFTER INSERT ON comment_likes
 CREATE TRIGGER update_comment_like_count_on_delete AFTER DELETE ON comment_likes FOR EACH ROW EXECUTE FUNCTION update_comment_like_count();
 
 -- Event RSVP count triggers
+DROP TRIGGER IF EXISTS update_rsvp_count_on_insert ON event_rsvps;
+DROP TRIGGER IF EXISTS update_rsvp_count_on_delete ON event_rsvps;
+DROP TRIGGER IF EXISTS update_rsvp_count_on_update ON event_rsvps;
 CREATE TRIGGER update_rsvp_count_on_insert AFTER INSERT ON event_rsvps FOR EACH ROW EXECUTE FUNCTION update_event_rsvp_count();
 CREATE TRIGGER update_rsvp_count_on_delete AFTER DELETE ON event_rsvps FOR EACH ROW EXECUTE FUNCTION update_event_rsvp_count();
+CREATE TRIGGER update_rsvp_count_on_update AFTER UPDATE ON event_rsvps FOR EACH ROW EXECUTE FUNCTION update_event_rsvp_count();
+
+-- Event capacity enforcement triggers (blocks RSVPs beyond max_attendees)
+DROP TRIGGER IF EXISTS enforce_capacity_insert ON event_rsvps;
+DROP TRIGGER IF EXISTS enforce_capacity_update ON event_rsvps;
+CREATE TRIGGER enforce_capacity_insert BEFORE INSERT ON event_rsvps FOR EACH ROW EXECUTE FUNCTION enforce_event_capacity();
+CREATE TRIGGER enforce_capacity_update BEFORE UPDATE ON event_rsvps FOR EACH ROW EXECUTE FUNCTION enforce_event_capacity();
 
 -- Conversation/message triggers
 CREATE TRIGGER update_conversation_on_message_insert AFTER INSERT ON messages FOR EACH ROW EXECUTE FUNCTION update_conversation_on_message();

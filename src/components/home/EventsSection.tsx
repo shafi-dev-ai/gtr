@@ -17,7 +17,7 @@ interface EventWithAttendees extends EventWithCreator {
 }
 
 interface EventsSectionProps {
-  onEventPress?: (eventId: string) => void;
+  onEventPress?: (event: EventWithCreator) => void;
   onFavorite?: (eventId: string) => void;
   onSeeMorePress?: () => void;
   onRefreshReady?: (refreshFn: () => Promise<void>) => void;
@@ -208,7 +208,7 @@ export const EventsSection: React.FC<EventsSectionProps> = ({
           <EventCard
             key={event.id}
             event={event}
-            onPress={() => onEventPress?.(event.id)}
+            onPress={() => onEventPress?.(event)}
             onFavorite={() => onFavorite?.(event.id)}
           />
         ))}

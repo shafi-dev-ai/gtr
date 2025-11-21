@@ -29,6 +29,7 @@ import { ChatScreen } from './src/screens/messages/ChatScreen';
 import { ListingDetailScreen } from './src/screens/listings/ListingDetailScreen';
 import { CreateListingScreen } from './src/screens/listings/CreateListingScreen';
 import { CreateEventScreen } from './src/screens/events/CreateEventScreen';
+import { EventDetailScreen } from './src/screens/events/EventDetailScreen';
 import { CreateForumPostScreen } from './src/screens/forum/CreateForumPostScreen';
 import { BrandSplash } from './src/components/common/BrandSplash';
 
@@ -73,6 +74,7 @@ const AppStack = () => {
       <Stack.Screen name="ListingDetail" component={ListingDetailScreen} />
       <Stack.Screen name="CreateListing" component={CreateListingScreen} />
       <Stack.Screen name="CreateEvent" component={CreateEventScreen} />
+      <Stack.Screen name="EventDetail" component={EventDetailScreen} />
       <Stack.Screen name="CreateForumPost" component={CreateForumPostScreen} />
     </Stack.Navigator>
   );

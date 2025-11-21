@@ -138,14 +138,17 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
     setMarketplaceSearchQuery('');
   };
 
-  const handleEventPress = (eventId: string) => {
-    // TODO: Navigate to event detail screen
-    console.log('Event pressed:', eventId);
+  const handleEventPress = (event: EventWithCreator) => {
+    if (!navigation) return;
+    navigation.navigate('EventDetail', {
+      eventId: event.id,
+      initialEvent: event,
+    });
   };
 
-  const handleEventFavorite = (eventId: string) => {
-    // TODO: Handle event favorite action
-    console.log('Event favorite:', eventId);
+  const handleEventFavorite = (_eventId: string) => {
+    // Refresh feeds after favorite changes are picked up by context
+    refreshFunctionsRef.current.forEach((fn) => fn?.());
   };
 
   const handleEventsSeeMorePress = () => {
@@ -444,7 +447,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
 };
 
 interface ExploreEventsListProps {
-  onEventPress?: (eventId: string) => void;
+  onEventPress?: (event: EventWithCreator) => void;
   onFavorite?: (eventId: string) => void;
   onRefreshReady?: (refreshFn: () => Promise<void>) => void;
 }
@@ -524,7 +527,7 @@ const ExploreEventsList: React.FC<ExploreEventsListProps> = ({
         <View style={styles.exploreCardWrapper} key={event.id}>
           <EventCardVertical
             event={event}
-            onPress={() => onEventPress?.(event.id)}
+            onPress={() => onEventPress?.(event)}
             onFavorite={() => onFavorite?.(event.id)}
           />
         </View>
