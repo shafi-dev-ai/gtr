@@ -2211,13 +2211,13 @@ ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
 -- ============================================================================
 -- Next steps:
 -- 1. Create storage buckets in Supabase Dashboard (Storage → Create Bucket):
---    - listing-images (public, 10MB)
---    - avatars (public, 2MB)
---    - forum-images (public, 5MB)
---    - garage-images (public, 10MB)
---    - event-images (public, 5MB)
---    - message-images (private, 5MB)
---    - community-media (public, 50MB)
+--    - listing-images (public, 10MB) Type image/*
+--    - avatars (public, 2MB) Type image/*
+--    - forum-images (public, 10MB) Type image/*
+--    - garage-images (public, 10MB) Type image/*
+--    - event-images (public, 10MB) Type image/*
+--    - message-images (private, 10MB) Type image/*
+--    - community-media (public, 50MB) Type Any
 -- 2. Configure authentication providers in Authentication → Providers
 -- 3. Test your setup by creating a test user
 -- ============================================================================
