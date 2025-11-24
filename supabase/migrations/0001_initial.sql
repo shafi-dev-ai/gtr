@@ -434,7 +434,8 @@ CREATE INDEX IF NOT EXISTS idx_events_start_date ON events(start_date);
 CREATE INDEX IF NOT EXISTS idx_events_event_type ON events(event_type);
 CREATE INDEX IF NOT EXISTS idx_events_created_by ON events(created_by);
 CREATE INDEX IF NOT EXISTS idx_events_location ON events(location);
-CREATE INDEX IF NOT EXISTS idx_events_upcoming ON events(start_date) WHERE start_date > NOW();
+-- Removed because partial index predicates must be IMMUTABLE; use the start_date index above instead
+-- CREATE INDEX IF NOT EXISTS idx_events_upcoming ON events(start_date) WHERE start_date > NOW();
 CREATE INDEX IF NOT EXISTS idx_event_images_event_id ON event_images(event_id);
 CREATE INDEX IF NOT EXISTS idx_event_images_display_order ON event_images(event_id, display_order);
 

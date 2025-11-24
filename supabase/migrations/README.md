@@ -31,4 +31,4 @@ This folder tracks database changes for GT-R Marketplace. The baseline is `0001_
 ## Current incremental migrations
 
 - `0002_add_profile_creation_errors.sql`: adds `profile_creation_errors` (legacy/debug logging, RLS off to match current project).
-- `0003_phone_verification.sql`: adds `phone_verification_codes` (service-role-only), indexes, RLS, and `verify_phone_code` helper to mark `profiles.phone_verified` true.
+- `0003_phone_verification.sql`: removed (content merged into 0001); keep the filename reserved to avoid reordering.
