@@ -164,9 +164,13 @@ export const forumService = {
       ])
     );
 
-    return likes
-      .map((like) => postsMap.get(like.post_id))
-      .filter((post): post is ForumPostWithUser => Boolean(post));
+    const likedPosts = likes.reduce<ForumPostWithUser[]>((acc, like) => {
+      const post = postsMap.get(like.post_id);
+      if (post) acc.push(post);
+      return acc;
+    }, []);
+
+    return likedPosts;
   },
 
   /**

@@ -20,6 +20,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ForumPostWithUser, ForumCommentWithUser } from '../../types/forum.types';
 import { forumService } from '../../services/forum';
+import { supabase } from '../../services/supabase';
 import { useDataFetch } from '../../hooks/useDataFetch';
 import dataManager, { RequestPriority } from '../../services/dataManager';
 import { useAuth } from '../../context/AuthContext';
@@ -40,6 +41,9 @@ interface CommentItem extends ForumCommentWithUser {
   repliesHasMore?: boolean;
   repliesLoading?: boolean;
   showReplies?: boolean;
+  threadLatestActivity?: string;
+  threadLikeSum?: number;
+  threadScore?: number;
 }
 
 const PAGE_SIZE = 20;
@@ -65,6 +69,105 @@ const timeAgo = (dateString?: string) => {
   return `${year}y ago`;
 };
 
+type ReplyMeta = {
+  latestActivity?: string;
+  replyLikeSum: number;
+};
+
+const buildReplyMetaMap = async (parentIds: string[]): Promise<Map<string, ReplyMeta>> => {
+  if (!parentIds.length) return new Map();
+  try {
+    const { data, error } = await supabase
+      .from('forum_comments')
+      .select('parent_comment_id, created_at, like_count')
+      .in('parent_comment_id', parentIds);
+
+    if (error) throw error;
+
+    const meta = new Map<string, ReplyMeta>();
+    (data || []).forEach((row) => {
+      if (!row.parent_comment_id) return;
+      const existing = meta.get(row.parent_comment_id) || { replyLikeSum: 0 };
+      const latestExisting = existing.latestActivity
+        ? new Date(existing.latestActivity).getTime()
+        : 0;
+      const latestIncoming = row.created_at ? new Date(row.created_at).getTime() : 0;
+      const latestActivity =
+        latestIncoming > latestExisting ? row.created_at : existing.latestActivity;
+
+      meta.set(row.parent_comment_id, {
+        latestActivity,
+        replyLikeSum: existing.replyLikeSum + (row.like_count || 0),
+      });
+    });
+
+    return meta;
+  } catch (err) {
+    console.error('Error fetching reply metadata for ordering', err);
+    return new Map();
+  }
+};
+
+const computeThreadOrder = async (
+  commentList: CommentItem[],
+  options?: { replyMeta?: Map<string, ReplyMeta>; fetchMeta?: boolean }
+): Promise<{ ordered: CommentItem[]; metaMap: Map<string, ReplyMeta> }> => {
+  if (!commentList.length) return { ordered: [], metaMap: new Map() };
+
+  const parentIds = commentList.map((c) => c.id);
+  const metaMap =
+    options?.fetchMeta === false
+      ? options?.replyMeta || new Map()
+      : await buildReplyMetaMap(parentIds);
+  const now = Date.now();
+
+  const scored = commentList.map((comment) => {
+    const meta = metaMap.get(comment.id);
+
+    const latestLoadedReplyTs =
+      comment.replies?.reduce((max, reply) => {
+        const ts = reply.created_at ? new Date(reply.created_at).getTime() : 0;
+        return Math.max(max, ts);
+      }, 0) || 0;
+
+    const latestCandidates = [
+      comment.created_at ? new Date(comment.created_at).getTime() : 0,
+      meta?.latestActivity ? new Date(meta.latestActivity).getTime() : 0,
+      latestLoadedReplyTs,
+    ].filter(Boolean);
+
+    const latestActivityTs = latestCandidates.length ? Math.max(...latestCandidates) : now;
+
+    const replyLikesFromMeta = meta?.replyLikeSum ?? 0;
+    const replyLikesLoaded =
+      meta ? 0 : comment.replies?.reduce((sum, r) => sum + (r.like_count || 0), 0) || 0;
+
+    const totalLikes = (comment.like_count || 0) + replyLikesFromMeta + replyLikesLoaded;
+
+    const hoursOld = Math.max(0, (now - latestActivityTs) / 36e5);
+    const recencyScore = 1 / (1 + hoursOld / 6); // decay after ~6 hours
+    const likeScore = Math.log1p(totalLikes);
+    const threadScore = recencyScore * 2 + likeScore; // weight recency slightly higher
+
+    return {
+      ...comment,
+      threadLatestActivity: new Date(latestActivityTs).toISOString(),
+      threadLikeSum: totalLikes,
+      threadScore,
+    };
+  });
+
+  const ordered = scored.sort((a, b) => {
+    const scoreDiff = (b.threadScore || 0) - (a.threadScore || 0);
+    if (scoreDiff !== 0) return scoreDiff;
+    const aTs = a.threadLatestActivity || a.created_at;
+    const bTs = b.threadLatestActivity || b.created_at;
+    return new Date(bTs || 0).getTime() - new Date(aTs || 0).getTime();
+  });
+
+  return { ordered, metaMap };
+};
+
 export const ForumDetailScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute();
@@ -83,6 +186,20 @@ export const ForumDetailScreen: React.FC = () => {
   const [inputBarHeight, setInputBarHeight] = useState(96);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [heroIndex, setHeroIndex] = useState(0);
+  const commentsRef = useRef<CommentItem[]>([]);
+  const replyMetaCache = useRef<Map<string, ReplyMeta>>(new Map());
+  const orderAndSetComments = useCallback(
+    async (next: CommentItem[], options?: { fetchMeta?: boolean }) => {
+      const { ordered, metaMap } = await computeThreadOrder(next, {
+        replyMeta: replyMetaCache.current,
+        fetchMeta: options?.fetchMeta,
+      });
+      replyMetaCache.current = metaMap;
+      commentsRef.current = ordered;
+      setComments(ordered);
+    },
+    []
+  );
 
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', (event) => {
@@ -143,8 +260,9 @@ export const ForumDetailScreen: React.FC = () => {
           parentCommentId: null,
         });
 
-        const merged = reset ? fetched : [...comments, ...fetched];
-        setComments(merged as CommentItem[]);
+        const baseList = commentsRef.current;
+        const merged = reset ? fetched : [...baseList, ...fetched];
+        await orderAndSetComments(merged as CommentItem[]);
         setCommentsOffset(nextOffset + fetched.length);
         setHasMoreComments(fetched.length === PAGE_SIZE);
 
@@ -159,7 +277,7 @@ export const ForumDetailScreen: React.FC = () => {
         setLoadingMore(false);
       }
     },
-    [postId, comments, commentsOffset, user?.id]
+    [postId, comments, commentsOffset, user?.id, orderAndSetComments]
   );
 
   useEffect(() => {
@@ -191,20 +309,20 @@ export const ForumDetailScreen: React.FC = () => {
       else next.add(commentId);
       return next;
     });
-    setComments(prev =>
-      prev.map(c =>
-        c.id === commentId
-          ? { ...c, like_count: Math.max(0, (c.like_count || 0) + (isLiked ? -1 : 1)) }
-          : {
-              ...c,
-              replies: c.replies?.map(r =>
-                r.id === commentId
-                  ? { ...r, like_count: Math.max(0, (r.like_count || 0) + (isLiked ? -1 : 1)) }
-                  : r
-              ),
-            }
-      )
+    const baseList = commentsRef.current;
+    const updated = baseList.map(c =>
+      c.id === commentId
+        ? { ...c, like_count: Math.max(0, (c.like_count || 0) + (isLiked ? -1 : 1)) }
+        : {
+            ...c,
+            replies: c.replies?.map(r =>
+              r.id === commentId
+                ? { ...r, like_count: Math.max(0, (r.like_count || 0) + (isLiked ? -1 : 1)) }
+                : r
+            ),
+          }
     );
+    await orderAndSetComments(updated, { fetchMeta: false });
 
     try {
       if (isLiked) {
@@ -226,14 +344,14 @@ export const ForumDetailScreen: React.FC = () => {
         onPress: async () => {
           try {
             await forumService.deleteComment(commentId);
-            setComments(prev =>
-              prev
-                .filter(c => c.id !== commentId)
-                .map(c => ({
-                  ...c,
-                  replies: c.replies?.filter(r => r.id !== commentId),
-                }))
-            );
+            const baseList = commentsRef.current;
+            const updated = baseList
+              .filter(c => c.id !== commentId)
+              .map(c => ({
+                ...c,
+                replies: c.replies?.filter(r => r.id !== commentId),
+              }));
+            await orderAndSetComments(updated, { fetchMeta: false });
             invalidateForumCaches();
           } catch (err) {
             console.error('Error deleting comment', err);
@@ -246,18 +364,22 @@ export const ForumDetailScreen: React.FC = () => {
 
   const handleReplyToggle = async (comment: CommentItem) => {
     if (comment.showReplies) {
-      setComments(prev =>
-        prev.map(c => (c.id === comment.id ? { ...c, showReplies: false } : c))
-      );
+      setComments(prev => {
+        const updated = prev.map(c => (c.id === comment.id ? { ...c, showReplies: false } : c));
+        commentsRef.current = updated;
+        return updated;
+      });
       return;
     }
 
     // Load initial replies
-    setComments(prev =>
-      prev.map(c =>
+    setComments(prev => {
+      const updated = prev.map(c =>
         c.id === comment.id ? { ...c, repliesLoading: true, showReplies: true } : c
-      )
-    );
+      );
+      commentsRef.current = updated;
+      return updated;
+    });
     try {
       const replies = await forumService.getPostComments(comment.post_id, {
         limit: REPLY_PAGE_SIZE,
@@ -268,33 +390,37 @@ export const ForumDetailScreen: React.FC = () => {
       if (likedIds.length) {
         setLikedComments(prev => new Set([...prev, ...likedIds]));
       }
-      setComments(prev =>
-        prev.map(c =>
-          c.id === comment.id
-            ? {
-                ...c,
-                replies,
-                repliesOffset: replies.length,
-                repliesHasMore: replies.length === REPLY_PAGE_SIZE,
-                repliesLoading: false,
-                showReplies: true,
-              }
-            : c
-        )
+      const baseList = commentsRef.current;
+      const updated = baseList.map(c =>
+        c.id === comment.id
+          ? {
+              ...c,
+              replies,
+              repliesOffset: replies.length,
+              repliesHasMore: replies.length === REPLY_PAGE_SIZE,
+              repliesLoading: false,
+              showReplies: true,
+            }
+          : c
       );
+      await orderAndSetComments(updated, { fetchMeta: false });
     } catch (err) {
       console.error('Error loading replies', err);
-      setComments(prev =>
-        prev.map(c => (c.id === comment.id ? { ...c, repliesLoading: false } : c))
-      );
+      setComments(prev => {
+        const updated = prev.map(c => (c.id === comment.id ? { ...c, repliesLoading: false } : c));
+        commentsRef.current = updated;
+        return updated;
+      });
     }
   };
 
   const handleLoadMoreReplies = async (comment: CommentItem) => {
     if (comment.repliesLoading || !comment.repliesHasMore) return;
-    setComments(prev =>
-      prev.map(c => (c.id === comment.id ? { ...c, repliesLoading: true } : c))
-    );
+    setComments(prev => {
+      const updated = prev.map(c => (c.id === comment.id ? { ...c, repliesLoading: true } : c));
+      commentsRef.current = updated;
+      return updated;
+    });
     try {
       const replies = await forumService.getPostComments(comment.post_id, {
         limit: REPLY_PAGE_SIZE,
@@ -305,24 +431,26 @@ export const ForumDetailScreen: React.FC = () => {
       if (likedIds.length) {
         setLikedComments(prev => new Set([...prev, ...likedIds]));
       }
-      setComments(prev =>
-        prev.map(c =>
-          c.id === comment.id
-            ? {
-                ...c,
-                replies: [...(c.replies || []), ...replies],
-                repliesOffset: (c.repliesOffset || 0) + replies.length,
-                repliesHasMore: replies.length === REPLY_PAGE_SIZE,
-                repliesLoading: false,
-              }
-            : c
-        )
+      const baseList = commentsRef.current;
+      const updated = baseList.map(c =>
+        c.id === comment.id
+          ? {
+              ...c,
+              replies: [...(c.replies || []), ...replies],
+              repliesOffset: (c.repliesOffset || 0) + replies.length,
+              repliesHasMore: replies.length === REPLY_PAGE_SIZE,
+              repliesLoading: false,
+            }
+          : c
       );
+      await orderAndSetComments(updated, { fetchMeta: false });
     } catch (err) {
       console.error('Error loading more replies', err);
-      setComments(prev =>
-        prev.map(c => (c.id === comment.id ? { ...c, repliesLoading: false } : c))
-      );
+      setComments(prev => {
+        const updated = prev.map(c => (c.id === comment.id ? { ...c, repliesLoading: false } : c));
+        commentsRef.current = updated;
+        return updated;
+      });
     }
   };
 
@@ -351,21 +479,21 @@ export const ForumDetailScreen: React.FC = () => {
       };
 
       if (parentId) {
-        setComments(prev =>
-          [
-            ...prev.map(c =>
-            c.id === parentId
-              ? {
-                  ...c,
-                  replies: c.replies ? [newComment, ...c.replies] : [newComment],
-                  reply_count: (c.reply_count || 0) + 1,
-                  showReplies: true,
-                }
-              : c),
-          ]
+        const baseList = commentsRef.current;
+        const updated = baseList.map(c =>
+          c.id === parentId
+            ? {
+                ...c,
+                replies: c.replies ? [newComment, ...c.replies] : [newComment],
+                reply_count: (c.reply_count || 0) + 1,
+                showReplies: true,
+              }
+            : c
         );
+        await orderAndSetComments(updated, { fetchMeta: false });
       } else {
-        setComments(prev => [newComment, ...prev]);
+        const baseList = commentsRef.current;
+        await orderAndSetComments([newComment, ...baseList], { fetchMeta: false });
       }
       setReplyTarget(null);
       invalidateForumCaches();
