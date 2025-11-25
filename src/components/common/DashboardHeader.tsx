@@ -140,7 +140,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
     enabled: !!user,
   });
 
-  const displayName = profile?.full_name || profile?.username || user?.email?.split('@')[0] || 'User';
+  const displayName = profile?.full_name || profile?.username || user?.email?.split('@')[0] || '';
   const avatarUrl = profile?.avatar_url || null;
 
   return (

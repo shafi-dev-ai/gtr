@@ -16,6 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { profilesService } from '../../services/profiles';
 import { Profile, UpdateProfileData } from '../../types/profile.types';
+import dataManager from '../../services/dataManager';
 
 interface AccountSettingsScreenProps {
   navigation?: any;
@@ -118,6 +119,12 @@ export const AccountSettingsScreen: React.FC<AccountSettingsScreenProps> = () =>
       const updatedProfile = await profilesService.updateProfile(updates);
       setProfile(updatedProfile);
       setHasChanges(false);
+
+      // Keep caches in sync so profile screens update immediately
+      dataManager.setCache('profile:current', updatedProfile, 10 * 60 * 1000);
+      if (user?.id) {
+        dataManager.invalidateCache(`profile:stats:${user.id}`);
+      }
 
       Alert.alert('Success', 'Account settings updated successfully.');
     } catch (error: any) {

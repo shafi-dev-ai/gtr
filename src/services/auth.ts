@@ -5,6 +5,7 @@ export interface SignUpData {
   email: string;
   password: string;
   phoneNumber: string;
+  fullName?: string;
 }
 
 export interface SignInData {
@@ -21,20 +22,24 @@ export const authService = {
       options: {
         data: {
           phone_number: data.phoneNumber,
+          full_name: data.fullName,
         },
         emailRedirectTo: 'gtr-marketplace://verify-email',
       },
     });
 
-    // If signup successful and we have a user, update the profile with phone number
-    if (!error && authData?.user && data.phoneNumber) {
+    // If signup successful and we have a user, update the profile with phone number/full name
+    if (!error && authData?.user && (data.phoneNumber || data.fullName)) {
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({ phone_number: data.phoneNumber })
+        .update({
+          phone_number: data.phoneNumber,
+          full_name: data.fullName,
+        })
         .eq('id', authData.user.id);
 
       if (profileError) {
-        console.log('Error updating profile with phone number:', profileError);
+        console.log('Error updating profile with signup metadata:', profileError);
         // Don't fail the signup if profile update fails, just log it
       }
     }
@@ -131,4 +136,3 @@ export const authService = {
     return { data, error };
   },
 };
-

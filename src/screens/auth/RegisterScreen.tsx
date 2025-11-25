@@ -20,6 +20,7 @@ interface RegisterScreenProps {
 }
 
 export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
@@ -28,6 +29,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreeToTerms, setAgreeToTerms] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [fullNameError, setFullNameError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
@@ -47,6 +49,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
 
   const handleSignUp = async () => {
     // Clear previous errors
+    setFullNameError(null);
     setEmailError(null);
     setPhoneError(null);
     setPasswordError(null);
@@ -54,6 +57,11 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
     setTermsError(null);
 
     let hasError = false;
+
+    if (!fullName.trim()) {
+      setFullNameError('Full name is required');
+      hasError = true;
+    }
 
     if (!email.trim()) {
       setEmailError('Email address is required');
@@ -100,6 +108,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
 
     try {
       const { data, error: authError } = await authService.signUp({
+        fullName,
         email,
         password,
         phoneNumber: phoneNumber,
@@ -153,6 +162,26 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
           <Text style={styles.subtitle}>Create new account for better service</Text>
 
           <View style={styles.form}>
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Full Name</Text>
+              <View style={[styles.inputWrapper, fullNameError && styles.inputWrapperError]}>
+                <Ionicons name="person-outline" size={24} color="#808080" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Full name"
+                  placeholderTextColor="#808080"
+                  value={fullName}
+                  onChangeText={(text) => {
+                    setFullName(text);
+                    if (fullNameError) setFullNameError(null);
+                  }}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                />
+              </View>
+              {fullNameError && <Text style={styles.fieldError}>{fullNameError}</Text>}
+            </View>
+
             <View style={styles.inputContainer}>
               <Text style={styles.label}>E-mail Address</Text>
               <View style={[styles.inputWrapper, emailError && styles.inputWrapperError]}>
