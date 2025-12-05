@@ -8,6 +8,11 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "scheme": "gtr-marketplace",
+    "extra": {
+      "eas": {
+        "projectId": "ea56ef2e-560d-47c1-bd4c-7035171e1884"
+      }
+    },
     "splash": {
       "image": "./assets/images/logo.png",
       "resizeMode": "contain",
@@ -33,6 +38,7 @@
       ]
     ],
     "android": {
+      "googleServicesFile": "./android/app/google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"

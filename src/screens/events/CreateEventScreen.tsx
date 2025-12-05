@@ -129,6 +129,25 @@ const base64ToUint8Array = (base64String: string): Uint8Array => {
   return bytes;
 };
 
+const extractVenueFromLocation = (fullLocation: string, regionString?: string | null) => {
+  if (!fullLocation) return '';
+  if (!regionString || regionString === 'Location not specified') return fullLocation.trim();
+
+  const normalizedFull = fullLocation.trim();
+  const normalizedRegion = regionString.trim();
+  const lowerFull = normalizedFull.toLowerCase();
+  const lowerRegion = normalizedRegion.toLowerCase();
+
+  if (lowerFull.endsWith(lowerRegion)) {
+    const venue = normalizedFull
+      .slice(0, normalizedFull.length - normalizedRegion.length)
+      .replace(/,\s*$/, '');
+    return venue.trim();
+  }
+
+  return normalizedFull;
+};
+
 export const CreateEventScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute();
@@ -175,7 +194,18 @@ export const CreateEventScreen: React.FC = () => {
     setTitle(editingEvent.title || '');
     setDescription(editingEvent.description || '');
     setEventType(editingEvent.event_type || EVENT_TYPES[0]);
-    setLocation(editingEvent.location || '');
+    const hasRegionParts = !!(editingEvent.city || editingEvent.state || editingEvent.country);
+    const regionString = hasRegionParts
+      ? formatLocation({
+          city: editingEvent.city || undefined,
+          state: editingEvent.state || undefined,
+          country: editingEvent.country || undefined,
+        })
+      : null;
+    const venueOnly = hasRegionParts
+      ? extractVenueFromLocation(editingEvent.location || '', regionString)
+      : editingEvent.location || '';
+    setLocation(venueOnly);
     const countries = getCountries();
     const country =
       editingEvent.country ? countries.find((c) => c.code === editingEvent.country) || null : countries[0] || null;
@@ -458,9 +488,14 @@ export const CreateEventScreen: React.FC = () => {
         country: selectedCountry?.code || undefined,
       });
       const locationDetail = location.trim();
+      const normalizedRegion = regionString.trim().toLowerCase();
+      const normalizedLocationDetail = locationDetail.toLowerCase();
+      const alreadyHasRegion = normalizedLocationDetail.endsWith(normalizedRegion);
       const fullLocation = regionString
         ? locationDetail
-          ? `${locationDetail}, ${regionString}`
+          ? alreadyHasRegion
+            ? locationDetail
+            : `${locationDetail}, ${regionString}`
           : regionString
         : locationDetail;
       const maxAttendeeNumber = maxAttendees ? Number(maxAttendees) : undefined;

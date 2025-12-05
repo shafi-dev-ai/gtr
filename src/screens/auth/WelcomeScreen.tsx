@@ -39,9 +39,9 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
             contentFit="contain"
           />
           
-          <Text style={styles.descriptionText}>
-            Lorem Ipsum Neque porro quisquam est qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit...
-          </Text>
+          {/* <Text style={styles.descriptionText}>
+            A place where enthusiasts can buy, sell, showcase builds, and connect with the community like never before.
+          </Text> */}
         </View>
 
         <TouchableOpacity
